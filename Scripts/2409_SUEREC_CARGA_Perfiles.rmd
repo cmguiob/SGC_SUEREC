@@ -131,7 +131,7 @@ ggplot(data = perfil_nhoriz) +
 ```
 
 
-##  Modelado de perfiles
+##  Modelado de perfiles con GAM t Splines
 
 Se generan curvas suavizadas para los perfiles. Esto permite clasificar los tipos de perfiles con base en una variable numérica continua que nos representa.
 
@@ -142,7 +142,9 @@ Se generan curvas suavizadas para los perfiles. Esto permite clasificar los tipo
 ```
 
 
-## Agrupación de perfiles Modelado
+## Clasificación no supervisada de perfiles modelo 
+
+
 
 
 
