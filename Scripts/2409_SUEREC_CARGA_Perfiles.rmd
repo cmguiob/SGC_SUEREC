@@ -19,12 +19,12 @@ pacman::p_load(char = c("tidyverse"))
 
 Los datos se estructuraron de forma mínima para permitir la lectura en R: se eliminaron encabezados de doble fila, se cambiaron nombres de columnas para eliminar espacios y caracteres especiales y se llenaron los espacios vacíos en la columna que identifica los perfiles.
 
-```{r carga}
+```{r carga_tablas}
 #Definir URL
 data_url <- "https://raw.githubusercontent.com/cmguiob/SGC_SUEREC/main/Datos/IGAC_2014_PERFILES_QUINDIO_25K.csv"
 
 #Cargar url
-data <- read_csv(cht = data_url)
+data <- read_csv(data_url)
 
 # Ver datos
 View(data)
@@ -33,26 +33,117 @@ View(data)
 str(data)
 ```
 
+
+También se cargan los datos geográficos
+
+...
+
 ## Procesamiento de datos
 
-Se reestructuran los datos para que puedan analizarse posteriormente.
+Se reestructuran los datos para que puedan analizarse posteriormente. Se seleccionan columnas con informaicón relevante, se filtran filas con información incompleta, se generan columnas para la base y el tope de los horizontes y se crea un identificador para los horizontes.
 
-```{r variables}
+También se les asignan coordenadas a los perfiles
+
+...
+
+```{r vars}
 
 data_vars <- data |>
-  dplyr::select(PERFIL, PROFUNDIDAD_cm, ARENA_porc, ARENA_perc_2, LIMO_porc, LIMO_perc_2, ARCILLA_porc, ARCILLA_perc_2, pH, CO_porc, Fe_ACTIVO_porc, Fe_ppm, DENS_real_gcm3, DENS_ap_gcm3, MACROPORO_perc, MICROPORO_perc, POROSIDAD_TOT_perc, pF_0, pF_33, pF_100, pF_500, pF_1500) |>
-  tidyr::separate(col = PROFUNDIDAD_cm, into = c("BASE", "TOPE"), sep = "-")
+  dplyr::select(PERFIL, PROFUNDIDAD_cm, ARENA_porc, ARENA_perc_2, LIMO_porc, LIMO_perc_2, ARCILLA_porc, ARCILLA_perc_2, pH, CO_porc, Fe_ppm, DENS_real_gcm3, DENS_ap_gcm3, MACROPORO_perc, MICROPORO_perc, POROSIDAD_TOT_perc, pF_0, pF_33, pF_100, pF_500, pF_1500) |>
+  tidyr::separate(col = PROFUNDIDAD_cm, into = c("TOPE", "BASE"), sep = "-") |>
+  dplyr::mutate(HORIZ_ID = row_number(), .by = PERFIL) |>
+  dplyr::select(PERFIL, HORIZ_ID, TOPE, BASE, everything()) |>
+  tidyr::drop_na() |>
+  dplyr::mutate(BASE = as.numeric(na_if(BASE, "N"))) |>
+  dplyr::mutate(TOPE = as.numeric(TOPE))
+
 
 View(data_vars)
 
 ```
 
-## Including Plots
+A continuación se resumen algunas características de los perfiles.
 
-You can also embed plots, for example:
+```{r resumen}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# Número de perfiles
+perfiles_n <- data_vars |>
+  select(PERFIL) |>
+  distinct() |>
+  count()
+
+# Máxima profundidad por perfil
+perfil_pmax <- data_vars |>
+  group_by(PERFIL) |>
+  summarise(perfil_prof_max = as.numeric(max(BASE, na.rm = TRUE))) |>
+  ungroup()
+
+# Número de horizontes por perfil
+perfil_nhoriz <- data_vars |>
+  group_by(PERFIL) |>
+  dplyr::summarise(horizontes = n()) |>
+  ungroup()
+
+# Resumir las propiedades para horizontes
+horiz_prof_max <- perfil_nhoriz |>
+  inner_join(perfil_pmax, by = "PERFIL") |>
+  group_by(horizontes) |>
+  dplyr::summarise(prof_max = max(perfil_prof_max))
+
+horiz_prof_min <- perfil_nhoriz |>
+  inner_join(perfil_pmax, by = "PERFIL") |>
+  group_by(horizontes) |>
+  dplyr::summarise(prof_min = min(perfil_prof_max))
+
+horiz_n_frec <- perfil_nhoriz |>
+  group_by(horizontes) |>
+  dplyr::summarise(horiz_n_frec = n())
+
+horiz_resumen <- horiz_prof_min |>
+  inner_join(horiz_prof_max, by = "horizontes") |>
+  inner_join(horiz_n_frec, by = "horizontes") |>
+  mutate(prof_rango = paste0(prof_min," - ", prof_max, " cm")) 
+
+
+
+# Grafica
+ggplot(data = perfil_nhoriz) +
+  geom_histogram(aes(x = horizontes), binwidth = 1) +
+  labs(x = "Número de horizontes por perfil", y = "Frecuencia") +
+  geom_label(
+    label = paste0("n = ", perfiles_n),
+    size = 7,
+    x = 6,
+    y = 20,
+    label.padding = unit(1, "lines"), # Rectangle size around label
+    color = "black",
+    fill = "white"
+  ) +
+  geom_text(
+    data = horiz_resumen, 
+    aes(
+      x = horizontes, 
+      y = horiz_n_frec + 1, 
+      label = paste(prof_rango)), 
+      size = 3.5
+  )
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+##  Modelado de perfiles
+
+Se generan curvas suavizadas para los perfiles. Esto permite clasificar los tipos de perfiles con base en una variable numérica continua que nos representa.
+
+
+```{r curvas}
+
+
+```
+
+
+## Agrupación de perfiles Modelado
+
+
+
+##
