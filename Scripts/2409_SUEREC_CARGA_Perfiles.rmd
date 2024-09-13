@@ -9,9 +9,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 
 # Carga de librerías
-if (installed.packages("pacman") == FALSE) {
-  install.packages("pacman")
-}
+if (!require("pacman")) install.packages("pacman")
 
 pacman::p_load(char = c("tidyverse"))
 
@@ -22,17 +20,31 @@ pacman::p_load(char = c("tidyverse"))
 Los datos se estructuraron de forma mínima para permitir la lectura en R: se eliminaron encabezados de doble fila, se cambiaron nombres de columnas para eliminar espacios y caracteres especiales y se llenaron los espacios vacíos en la columna que identifica los perfiles.
 
 ```{r carga}
+#Definir URL
+data_url <- "https://raw.githubusercontent.com/cmguiob/SGC_SUEREC/main/Datos/IGAC_2014_PERFILES_QUINDIO_25K.csv"
 
+#Cargar url
+data <- read_csv(cht = data_url)
 
+# Ver datos
+View(data)
 
+# Ver estructura y tipos
+str(data)
 ```
 
-## Limpieza de datos
+## Procesamiento de datos
 
-You can include R code in the document as follows:
+Se reestructuran los datos para que puedan analizarse posteriormente.
 
-```{r cars}
-summary(cars)
+```{r variables}
+
+data_vars <- data |>
+  dplyr::select(PERFIL, PROFUNDIDAD_cm, ARENA_porc, ARENA_perc_2, LIMO_porc, LIMO_perc_2, ARCILLA_porc, ARCILLA_perc_2, pH, CO_porc, Fe_ACTIVO_porc, Fe_ppm, DENS_real_gcm3, DENS_ap_gcm3, MACROPORO_perc, MICROPORO_perc, POROSIDAD_TOT_perc, pF_0, pF_33, pF_100, pF_500, pF_1500) |>
+  tidyr::separate(col = PROFUNDIDAD_cm, into = c("BASE", "TOPE"), sep = "-")
+
+View(data_vars)
+
 ```
 
 ## Including Plots
