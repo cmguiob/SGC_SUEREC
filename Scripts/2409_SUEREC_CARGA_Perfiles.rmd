@@ -1,0 +1,46 @@
+---
+title: "Análisis de agrupamiento hidropedológico de suelos"
+output: github_document
+---
+
+```{r config, include=FALSE}
+
+# Renderiza el código 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Carga de librerías
+if (installed.packages("pacman") == FALSE) {
+  install.packages("pacman")
+}
+
+pacman::p_load(char = c("tidyverse"))
+
+```
+
+## Carga de datos
+
+Los datos se estructuraron de forma mínima para permitir la lectura en R: se eliminaron encabezados de doble fila, se cambiaron nombres de columnas para eliminar espacios y caracteres especiales y se llenaron los espacios vacíos en la columna que identifica los perfiles.
+
+```{r carga}
+
+
+
+```
+
+## Limpieza de datos
+
+You can include R code in the document as follows:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
