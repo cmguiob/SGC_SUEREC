@@ -34,17 +34,21 @@ str(data)
 ```
 
 
-También se cargan los datos geográficos
+También se cargan los datos espaciales en formato geojson que contienen las unidades cartográficas de suelos.
 
-...
+```{r carga_UCS}
+
+geodata_RUTA <- here::here("Datos","IGAC_UCS_QUINDIO_WGS84.geojson")
+
+geodata <- sf::read_sf(geodata_RUTA)
+
+geodata
+```
 
 ## Procesamiento de datos
 
 Se reestructuran los datos para que puedan analizarse posteriormente. Se seleccionan columnas con informaicón relevante, se filtran filas con información incompleta, se generan columnas para la base y el tope de los horizontes y se crea un identificador para los horizontes.
 
-También se les asignan coordenadas a los perfiles
-
-...
 
 ```{r vars}
 
@@ -61,6 +65,19 @@ data_vars <- data |>
 View(data_vars)
 
 ```
+
+
+También se les asignan coordenadas a los perfiles
+
+```{r}
+
+geodata_vars <- geodata |>
+  select(UCS, UNIDAD_CAR, COMPONENTE, AREA = area, PERFIL, geometry)
+
+View(geodata_vars)
+
+```
+
 
 A continuación se resumen algunas características de los perfiles.
 
