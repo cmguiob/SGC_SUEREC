@@ -208,7 +208,6 @@ horiz_resumen <- horiz_prof_min |>
   mutate(prof_rango = paste0(prof_min," - ", prof_max, " cm")) 
 
 
-
 # Grafica
 ggplot(data = perfil_nhoriz) +
   geom_histogram(aes(x = horizontes), binwidth = 1) +
@@ -238,19 +237,19 @@ A continuación se resumen algunas características de los horizontes para el co
 ```{r}
 
 # Número de perfiles
-perfiles_n <- data_vars |>
+perfiles_n <- data_modelado |>
   select(PERFIL) |>
   distinct() |>
   count()
 
 # Máxima profundidad por perfil
-perfil_pmax <- data_vars |>
+perfil_pmax <- data_modelado |>
   group_by(PERFIL) |>
   summarise(perfil_prof_max = as.numeric(max(BASE, na.rm = TRUE))) |>
   ungroup()
 
 # Número de horizontes por perfil
-perfil_nhoriz <- data_vars |>
+perfil_nhoriz <- data_modelado |>
   group_by(PERFIL) |>
   dplyr::summarise(horizontes = n()) |>
   ungroup()
