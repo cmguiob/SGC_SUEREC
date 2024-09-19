@@ -42,7 +42,8 @@ También se cargan los datos espaciales en formato geojson que contienen las uni
 geodata_URL <- "https://raw.githubusercontent.com/cmguiob/SGC_SUEREC/main/Datos/IGAC_UCS_QUINDIO_WGS84.geojson"
 
 # Se cargan los datos
-geodata <- sf::read_sf(geodata_URL)
+geodata <- sf::read_sf(geodata_URL, crs = "+proj=longlat +datum=WGS84 +no_defs +type=crs")
+
 
 # Se visualizan los datos
 View(geodata)
@@ -73,59 +74,41 @@ Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y co
 ```{r}
 
 geodata_perfiles <- geodata |>
-  dplyr::select(UNIDAD_CAR, UCS, PERFIL) |> #seleccionan variables útiles
+  dplyr::select(UCS, AREA = area, PERFIL) |> #seleccionan variables útiles
   tidyr::separate_longer_delim(PERFIL, ",") |> #desagrega la columna de perfiles y expande el df a lo largo
   dplyr::group_by(UCS) |> #agrupa por UCS
-  dplyr::mutate(UCS_comps = paste(row_number(), UCS, sep = "-")) 
+  dplyr::mutate(UCS_comps = paste(UCS, row_number(),  sep = "-")) #crea columna identificadora por perfiles
 
-
-View(geodata_perfiles)
-```
-
-
-```{r}
 
 geodata_componentes <- geodata |>
-  dplyr::select(UNIDAD_CAR, UCS, COMPONENTE, PERFIL) |>
-  tidyr::separate_longer_delim(PERFIL, ",")
+  dplyr::select(UNIDAD_CAR, UCS, COMPONENTE) |>
+  dplyr::mutate(COMPONENTE = stringr::str_trim(COMPONENTE)) |> #elimina espacios en blanco
+  dplyr::mutate(COMPONENTE = stringr::str_remove(COMPONENTE, pattern = ".$")) |> #elimina puntos al final del texto
+  tidyr::separate_longer_delim(COMPONENTE, ".") |> #desagrega la columna de componentes y expande el df a lo largo
+  dplyr::group_by(UCS) |> #agrupa por UCS
+  dplyr::mutate(UCS_comps = paste(UCS, row_number(),  sep = "-")) |> #crea columna identificadora por componentes
+  dplyr::mutate(ORDEN = stringr::str_extract(COMPONENTE, pattern = "^.*?(?=(neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults))(neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults)")) |>  #se extraen los nombres de los ordenes
+  dplyr::filter(stringr::str_detect(ORDEN, pattern =  "neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults"))
 
-
-View(geodata_componentes)
-
-```
-
-También se les asignan coordenadas a los perfiles
-
-```{r}
-
-# Se divide (por ".") y expande la columna de componentes. 
-geodata_componentes <- geodata |>
-  dplyr::select(UCS, COMPONENTE, geometry) |>
-  dplyr::mutate(COMPONENTE = str_trim(COMPONENTE)) |>
-  dplyr::mutate(COMPONENTE = str_remove(COMPONENTE, pattern = ".$")) |>
-  tidyr::separate_longer_delim(cols = "COMPONENTE", delim = ". ") |>
-  dplyr::group_by(UCS) |>
-  dplyr::mutate(id = row_number()) |>
-  dplyr::ungroup() |>
-  dplyr::mutate(UCS_comps = paste(UCS, id, sep = "-")) |>
-  dplyr::select(-id)
-
-# Se divide (por ",") y expande la columna de perfiles.
-geodata_perfiles <- geodata |>
-  dplyr::select(UCS, UNIDAD_CAR, AREA = area, PERFIL, geometry) |>
-  tidyr::separate_longer_delim(cols = "PERFIL", delim = ",") |>
-  dplyr::group_by(UCS) |>
-  dplyr::mutate(id = row_number()) |>
-  dplyr::ungroup() |>
-  dplyr::mutate(UCS_comps = paste(UCS, id, sep = "-")) |>
-  dplyr::select(-id)
-
-
-geodata_vars <- full_join(geodata_componentes, geodata_perfiles, by = c("UCS", "UCS_comps", "geometry")) |>
-  dplyr::select(UNIDAD_CAR, UCS, UCS_comps, COMPONENTE, PERFIL, everything()) |>
+geodata_vars <- inner_join(geodata_componentes, geodata_perfiles, by = c("UCS", "UCS_comps", "geometry")) |>
+  dplyr::select(UNIDAD_CAR, UCS, UCS_comps, ORDEN, PERFIL, everything()) |>
   dplyr::arrange(UCS, UCS_comps)
 
+
 View(geodata_vars)
+
+plot(geodata_vars |> filter(UCS_comps == "CBd-1"))
+```
+
+
+Se consolidan los datos analíticos y los datos geoespaciales
+
+```{r}
+
+
+
+
+
 ```
 
 
