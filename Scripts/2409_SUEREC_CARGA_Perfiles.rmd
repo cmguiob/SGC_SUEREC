@@ -117,16 +117,31 @@ n_perfiles_data <- data_vars |> select(PERFIL) |> distinct() |> count()
 n_perfiles_comunes <- inner_join(geodata_vars, data_vars, by = "PERFIL") |> select(PERFIL) |> distinct() |> count()
 
 #Se crea reporte
-glue::glue('Hay {n_perfiles_data} perfiles en los datos analíticos, {n_perfiles_geodata} perfiles en los datos geoespaciales de UCS y {n_perfiles_comunes} en común')
+glue::glue("Hay {n_perfiles_data} perfiles en los datos analíticos, {n_perfiles_geodata} perfiles en los datos geoespaciales de UCS y {n_perfiles_comunes} en común")
 
 ```
 
-Se consolidan los datos analíticos y los datos geoespaciales
+Se consolidan los datos analíticos y los datos geoespaciales. Se hace una fusión completa (full join) para indicar cuáles datos necesitan recuperarse de la memoria técnica.
 
 ```{r}
 
+data_modelado_incompletos <- geodata_vars |>
+  dplyr::select(UNIDAD_CAR, ORDEN, PERFIL) |>
+  dplyr::distinct() |>
+  full_join(data_vars, by = "PERFIL")
+
+View(data_modelado_incompletos)
+
 ```
 
+Se completan los ordenes con datos de la memoria técnica para aumentar el número de perfiles que se puedan modelar.
+
+```{r}
+
+data_MT <- data.frame(PERFIL = c("QS-5"),
+                      ORDEN = c(""))
+
+```
 
 A continuación se resumen algunas características de los perfiles.
 
