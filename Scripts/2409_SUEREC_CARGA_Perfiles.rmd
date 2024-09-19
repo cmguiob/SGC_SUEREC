@@ -38,11 +38,11 @@ También se cargan los datos espaciales en formato geojson que contienen las uni
 
 ```{r carga_UCS}
 
-#Se define ruta
-geodata_RUTA <- here::here("Datos","IGAC_UCS_QUINDIO_WGS84.geojson")
+#Se define URL que contiene los datos
+geodata_URL <- "https://raw.githubusercontent.com/cmguiob/SGC_SUEREC/main/Datos/IGAC_UCS_QUINDIO_WGS84.geojson"
 
 # Se cargan los datos
-geodata <- sf::read_sf(geodata_RUTA)
+geodata <- sf::read_sf(geodata_URL)
 
 # Se visualizan los datos
 View(geodata)
@@ -68,26 +68,29 @@ data_vars <- data |>
 View(data_vars)
 ```
 
-Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y componentes
+Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y componentes. 
 
 ```{r}
 
 geodata_perfiles <- geodata |>
-  dplyr::select(UNIDAD_CAR, UCS, PERFIL) |>
-  tidyr::separate_longer_delim(PERFIL, ",") |>
-  dplyr::group_by(UCS) |>
-  dplyr::mutate(UCS_comps = paste(row_number(), UCS, sep = "-"))
+  dplyr::select(UNIDAD_CAR, UCS, PERFIL) |> #seleccionan variables útiles
+  tidyr::separate_longer_delim(PERFIL, ",") |> #desagrega la columna de perfiles y expande el df a lo largo
+  dplyr::group_by(UCS) |> #agrupa por UCS
+  dplyr::mutate(UCS_comps = paste(row_number(), UCS, sep = "-")) 
 
 
 View(geodata_perfiles)
+```
 
+
+```{r}
 
 geodata_componentes <- geodata |>
   dplyr::select(UNIDAD_CAR, UCS, COMPONENTE, PERFIL) |>
   tidyr::separate_longer_delim(PERFIL, ",")
 
 
-
+View(geodata_componentes)
 
 ```
 
