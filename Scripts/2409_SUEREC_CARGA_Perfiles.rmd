@@ -38,11 +38,14 @@ También se cargan los datos espaciales en formato geojson que contienen las uni
 
 ```{r carga_UCS}
 
+#Se define ruta
 geodata_RUTA <- here::here("Datos","IGAC_UCS_QUINDIO_WGS84.geojson")
 
+# Se cargan los datos
 geodata <- sf::read_sf(geodata_RUTA)
 
-geodata
+# Se visualizan los datos
+View(geodata)
 ```
 
 ## Procesamiento de datos
@@ -63,19 +66,63 @@ data_vars <- data |>
 
 
 View(data_vars)
-
 ```
 
+Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y componentes
+
+```{r}
+
+geodata_perfiles <- geodata |>
+  dplyr::select(UNIDAD_CAR, UCS, PERFIL) |>
+  tidyr::separate_longer_delim(PERFIL, ",") |>
+  dplyr::group_by(UCS) |>
+  dplyr::mutate(UCS_comps = paste(row_number(), UCS, sep = "-"))
+
+
+View(geodata_perfiles)
+
+
+geodata_componentes <- geodata |>
+  dplyr::select(UNIDAD_CAR, UCS, COMPONENTE, PERFIL) |>
+  tidyr::separate_longer_delim(PERFIL, ",")
+
+
+
+
+```
 
 También se les asignan coordenadas a los perfiles
 
 ```{r}
 
-geodata_vars <- geodata |>
-  select(UCS, UNIDAD_CAR, COMPONENTE, AREA = area, PERFIL, geometry)
+# Se divide (por ".") y expande la columna de componentes. 
+geodata_componentes <- geodata |>
+  dplyr::select(UCS, COMPONENTE, geometry) |>
+  dplyr::mutate(COMPONENTE = str_trim(COMPONENTE)) |>
+  dplyr::mutate(COMPONENTE = str_remove(COMPONENTE, pattern = ".$")) |>
+  tidyr::separate_longer_delim(cols = "COMPONENTE", delim = ". ") |>
+  dplyr::group_by(UCS) |>
+  dplyr::mutate(id = row_number()) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(UCS_comps = paste(UCS, id, sep = "-")) |>
+  dplyr::select(-id)
+
+# Se divide (por ",") y expande la columna de perfiles.
+geodata_perfiles <- geodata |>
+  dplyr::select(UCS, UNIDAD_CAR, AREA = area, PERFIL, geometry) |>
+  tidyr::separate_longer_delim(cols = "PERFIL", delim = ",") |>
+  dplyr::group_by(UCS) |>
+  dplyr::mutate(id = row_number()) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(UCS_comps = paste(UCS, id, sep = "-")) |>
+  dplyr::select(-id)
+
+
+geodata_vars <- full_join(geodata_componentes, geodata_perfiles, by = c("UCS", "UCS_comps", "geometry")) |>
+  dplyr::select(UNIDAD_CAR, UCS, UCS_comps, COMPONENTE, PERFIL, everything()) |>
+  dplyr::arrange(UCS, UCS_comps)
 
 View(geodata_vars)
-
 ```
 
 
