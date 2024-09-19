@@ -28,9 +28,6 @@ data <- read_csv(data_url)
 
 # Ver datos
 View(data)
-
-# Ver estructura y tipos
-str(data)
 ```
 
 
@@ -44,9 +41,15 @@ geodata_URL <- "https://raw.githubusercontent.com/cmguiob/SGC_SUEREC/main/Datos/
 # Se cargan los datos
 geodata <- sf::read_sf(geodata_URL, crs = "+proj=longlat +datum=WGS84 +no_defs +type=crs")
 
-
 # Se visualizan los datos
 View(geodata)
+
+#Chequeo de crs
+sf::st_crs(geodata)
+
+#Chequeo espacial
+plot(geodata |> filter(UCS == "CBe2"))
+
 ```
 
 ## Procesamiento de datos
@@ -69,45 +72,58 @@ data_vars <- data |>
 View(data_vars)
 ```
 
-Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y componentes. 
+Se consolida un conjunto de datos geoespaciales que diferencia los perfiles y componentes de las UCS. 
 
 ```{r}
 
 geodata_perfiles <- geodata |>
-  dplyr::select(UCS, AREA = area, PERFIL) |> #seleccionan variables útiles
+  sf::st_drop_geometry() |> #se quita la geometría para evitar filas repetidas
+  dplyr::select(UCS, PERFIL) |> #seleccionan variables útiles
   tidyr::separate_longer_delim(PERFIL, ",") |> #desagrega la columna de perfiles y expande el df a lo largo
+  dplyr::distinct() |>
   dplyr::group_by(UCS) |> #agrupa por UCS
-  dplyr::mutate(UCS_comps = paste(UCS, row_number(),  sep = "-")) #crea columna identificadora por perfiles
-
+  dplyr::mutate(UCS_comps = paste(UCS, row_number(),  sep = "-")) |> #crea columna identificadora por perfiles
+  dplyr::ungroup()
 
 geodata_componentes <- geodata |>
+  sf::st_drop_geometry() |> #se quita la geometría para evitar filas repetidas
   dplyr::select(UNIDAD_CAR, UCS, COMPONENTE) |>
   dplyr::mutate(COMPONENTE = stringr::str_trim(COMPONENTE)) |> #elimina espacios en blanco
   dplyr::mutate(COMPONENTE = stringr::str_remove(COMPONENTE, pattern = ".$")) |> #elimina puntos al final del texto
   tidyr::separate_longer_delim(COMPONENTE, ".") |> #desagrega la columna de componentes y expande el df a lo largo
+  dplyr::distinct() |>
   dplyr::group_by(UCS) |> #agrupa por UCS
   dplyr::mutate(UCS_comps = paste(UCS, row_number(),  sep = "-")) |> #crea columna identificadora por componentes
+  dplyr::ungroup() |>
   dplyr::mutate(ORDEN = stringr::str_extract(COMPONENTE, pattern = "^.*?(?=(neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults))(neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults)")) |>  #se extraen los nombres de los ordenes
   dplyr::filter(stringr::str_detect(ORDEN, pattern =  "neo|ents|epts|els|ids|ists|ands|olls|erts|alfs|oxs|ods|ults"))
 
-geodata_vars <- inner_join(geodata_componentes, geodata_perfiles, by = c("UCS", "UCS_comps", "geometry")) |>
+geodata_vars <- inner_join(geodata_componentes, geodata_perfiles, by = c("UCS", "UCS_comps")) |>
   dplyr::select(UNIDAD_CAR, UCS, UCS_comps, ORDEN, PERFIL, everything()) |>
   dplyr::arrange(UCS, UCS_comps)
 
 
 View(geodata_vars)
-
-plot(geodata_vars |> filter(UCS_comps == "CBd-1"))
 ```
 
+
+A continuación se hace un diagnóstico de cuantos perfiles de suelos aparecen en los datos analíticos, en los datos geoespaciales de UCS y cuantos en común.
+
+```{r}
+
+# Se crean objetos con el número de perfiles para los diferentes casos
+n_perfiles_geodata <- geodata_vars |> select(PERFIL) |> distinct() |> count()
+n_perfiles_data <- data_vars |> select(PERFIL) |> distinct() |> count()
+n_perfiles_comunes <- inner_join(geodata_vars, data_vars, by = "PERFIL") |> select(PERFIL) |> distinct() |> count()
+
+#Se crea reporte
+glue::glue('Hay {n_perfiles_data} perfiles en los datos analíticos, {n_perfiles_geodata} perfiles en los datos geoespaciales de UCS y {n_perfiles_comunes} en común')
+
+```
 
 Se consolidan los datos analíticos y los datos geoespaciales
 
 ```{r}
-
-
-
-
 
 ```
 
