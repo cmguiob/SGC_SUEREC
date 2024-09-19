@@ -126,7 +126,7 @@ Se consolidan los datos analíticos y los datos geoespaciales. Se hace una fusi�
 ```{r}
 
 data_modelado_incompletos <- geodata_vars |>
-  dplyr::select(UNIDAD_CAR, ORDEN, PERFIL) |>
+  dplyr::select(ORDEN, PERFIL) |>
   dplyr::distinct() |>
   full_join(data_vars, by = "PERFIL")
 
@@ -158,15 +158,14 @@ data_modelado <- data_modelado_incompletos |>
     PERFIL == "QS-92" ~ "Pachic Hapludands",
     TRUE ~ ORDEN
   )) |>
-  tidyr::drop_na(ORDEN)
+  drop_na()
 
 View(data_modelado)
 
 ```
 
 
-
-A continuación se resumen algunas características de los perfiles.
+A continuación se resumen algunas características de los horizontes para los perfiles disponibles en el conjunto de datos analíticos.
 
 ```{r resumen}
 
@@ -234,6 +233,74 @@ ggplot(data = perfil_nhoriz) +
 
 ```
 
+A continuación se resumen algunas características de los horizontes para el conjunto de datos que se usará en el modelado
+
+```{r}
+
+# Número de perfiles
+perfiles_n <- data_vars |>
+  select(PERFIL) |>
+  distinct() |>
+  count()
+
+# Máxima profundidad por perfil
+perfil_pmax <- data_vars |>
+  group_by(PERFIL) |>
+  summarise(perfil_prof_max = as.numeric(max(BASE, na.rm = TRUE))) |>
+  ungroup()
+
+# Número de horizontes por perfil
+perfil_nhoriz <- data_vars |>
+  group_by(PERFIL) |>
+  dplyr::summarise(horizontes = n()) |>
+  ungroup()
+
+# Resumir las propiedades para horizontes
+horiz_prof_max <- perfil_nhoriz |>
+  inner_join(perfil_pmax, by = "PERFIL") |>
+  group_by(horizontes) |>
+  dplyr::summarise(prof_max = max(perfil_prof_max))
+
+horiz_prof_min <- perfil_nhoriz |>
+  inner_join(perfil_pmax, by = "PERFIL") |>
+  group_by(horizontes) |>
+  dplyr::summarise(prof_min = min(perfil_prof_max))
+
+horiz_n_frec <- perfil_nhoriz |>
+  group_by(horizontes) |>
+  dplyr::summarise(horiz_n_frec = n())
+
+horiz_resumen <- horiz_prof_min |>
+  inner_join(horiz_prof_max, by = "horizontes") |>
+  inner_join(horiz_n_frec, by = "horizontes") |>
+  mutate(prof_rango = paste0(prof_min, " - ", prof_max, " cm"))
+
+
+
+# Grafica
+ggplot(data = perfil_nhoriz) +
+  geom_histogram(aes(x = horizontes), binwidth = 1) +
+  labs(x = "Número de horizontes por perfil", y = "Frecuencia") +
+  geom_label(
+    label = paste0("n = ", perfiles_n),
+    size = 7,
+    x = 6,
+    y = 20,
+    label.padding = unit(1, "lines"), # Rectangle size around label
+    color = "black",
+    fill = "white"
+  ) +
+  geom_text(
+    data = horiz_resumen,
+    aes(
+      x = horizontes,
+      y = horiz_n_frec + 1,
+      label = paste(prof_rango)
+    ),
+    size = 3.5
+  )
+
+```
 
 ##  Modelado de perfiles con GAM t Splines
 
