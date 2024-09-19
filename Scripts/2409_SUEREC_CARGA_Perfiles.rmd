@@ -138,10 +138,33 @@ Se completan los ordenes con datos de la memoria técnica para aumentar el núme
 
 ```{r}
 
-data_MT <- data.frame(PERFIL = c("QS-5"),
-                      ORDEN = c(""))
+data_modelado <- data_modelado_incompletos |>
+  dplyr::mutate(ORDEN = case_when(
+    PERFIL == "QS-5" ~ "Fluvaquentic Endoaquepts",
+    PERFIL == "QS-7" ~ "Fluventic Humudepts",
+    PERFIL == "QS-15" ~ "Fluvaquentic Humaquepts",
+    PERFIL == "QS-16" ~ "Typic Dystrudepts",
+    PERFIL == "QS-22" ~ "Typic Hapludands",
+    PERFIL == "QS-33" ~ "Typic Endoaquepts",
+    PERFIL == "QS-35" ~ "Fluvaquentic Endoaquepts",
+    PERFIL == "QS-42" ~ "Typic Hapludands",
+    PERFIL == "QS-46" ~ "Typic Hapludolls",
+    PERFIL == "QS-48" ~ "Typic Hapludands",
+    PERFIL == "QS-50" ~ "Acrudoxic Hapludands",
+    PERFIL == "QS-60" ~ "Pachic Hapludands",
+    PERFIL == "QS-64" ~ "Typic Hapludands",
+    PERFIL == "QS-71" ~ "Aeric Endoaquepts",
+    PERFIL == "QS-81" ~ "Typic Hapludands",
+    PERFIL == "QS-92" ~ "Pachic Hapludands",
+    TRUE ~ ORDEN
+  )) |>
+  tidyr::drop_na(ORDEN)
+
+View(data_modelado)
 
 ```
+
+
 
 A continuación se resumen algunas características de los perfiles.
 
