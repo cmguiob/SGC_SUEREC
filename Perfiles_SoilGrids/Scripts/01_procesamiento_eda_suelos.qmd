@@ -1,0 +1,130 @@
+---
+title: "Procesamiento y análisis exploratorio de datos de suelos"
+author: Carlos Guío
+format: html
+---
+
+Este cuaderno utiliza un script externo para llamar los datos de SoilGrids a resolución de 1 x 1 km, y los exporta a formato .tif para luego analizarlos, de forma exploratoria, permitiendo la visualización de perfiles promedio por tipo de propiedad, así como la identificación de dominios espaciales. El análisis se realiza para todo Colombia.
+
+
+```{r setup}
+
+# Para cargar librerias se verifica pacman
+if ("pacman" %in% installed.packages() == FALSE) install.packages("pacman")
+
+# Se cargan las librerias
+pacman::p_load(char = c(
+  "here", #manejo de rutas
+  "sf", #manipulación de dats espaciales
+  "dplyr", #procesamiento de data frames
+  "ggplot2",  #graficación
+  "patchwork", #mosaicos gráficos
+  "wesanderson", #paleta de colores
+  "qs" #escribir y leer rápidamente objetos R
+  )
+)
+
+#Paleta de colores
+pal <- wes_palette("Zissou1", 100, type = "continuous")
+
+# Ajusta tamaño de letra para las gráficas que genere el script
+theme(base_size = 14)
+
+```
+
+### 1. Carga de datos
+
+Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre.
+
+```{r carga}
+
+# Crea un objeto tipo función al ejecutar un  script externo
+source("00_funcion_descarga_soilgrids.R")
+
+# Se llama la función con los argumentos adaptados al proyecto
+stack_suelo_medias <- descargar_soilgrids_stack(
+  vars = c("cfvo", "sand", "silt", "clay", "bdod", "soc"),
+  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm"),
+  stats = c("mean"),
+  resolucion = c(1000, 1000)
+)
+
+
+```
+
+Se valida que los archivos se cargaron correctamente. Para esto, se calculan 
+
+```{r}
+
+# 1. Validación
+names(stack_suelo_medias)  # Nombres de las capas
+
+# 2. Medias por capa
+print(global(stack_suelo_medias, fun = "mean", na.rm = TRUE))
+
+# 3. NAs por capa
+na_counts <- global(stack_suelo_medias, fun = function(x) sum(is.na(x)))
+print(na_counts)
+
+# 2. Exportar stack original (sin normalizar) como .tif local
+out_raster <- here("Data", "soilgrids_stack_raw.tif")
+writeRaster(stack_suelo_medias, filename = out_raster, overwrite = TRUE)
+
+```
+
+
+## 3. Pre-procesamiento
+
+Se normalizan las escalas de las propiedades para poder usarlas posteriormente en modelos
+
+```{r}
+
+# 3. Leer desde .tif (esto evita los errores de proyección remota)
+stack_local <- rast(out_raster)
+
+# 4. Aplicar normalización Z a cada capa
+normaliza_var <- function(x) (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+stack_suelo_z <- app(stack_local, fun = normaliza_var)
+
+
+```
+
+```{r}
+# Lista de propiedades presentes
+propiedades <- c("cfvo", "sand", "silt", "clay", "bdod", "soc")
+
+# Crear una lista de stacks separados por propiedad
+stacks_por_prop <- lapply(propiedades, function(p) {
+  capas <- grep(paste0("^", p, "_"), names(stack_suelo_medias), value = TRUE)
+  subset(stack_suelo_medias, capas)
+})
+
+# Asignar nombres a la lista
+names(stacks_por_prop) <- propiedades
+
+plot(stacks_por_prop$clay,
+     main = names(stacks_por_prop$clay),
+     col = terrain.colors(20))
+
+```
+
+Se convierten los archivos .vrt en .tif para facilitar graficación y análisis.
+
+```{r}
+
+dir.create(here::here("Figures", "soilgrids_por_propiedad"), showWarnings = FALSE)
+
+for (p in propiedades) {
+  png_filename <- here::here("Figures", "soilgrids_por_propiedad", paste0("stack_", p, ".png"))
+  png(png_filename, width = 2800, height = 2000, res = 300)
+  plot(
+    stacks_por_prop[[p]],
+    main = names(stacks_por_prop[[p]]),
+    col = terrain.colors(20)
+  )
+  dev.off()
+  message("Exportado: ", png_filename)
+}
+
+```
+
