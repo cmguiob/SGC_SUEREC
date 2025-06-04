@@ -1,19 +1,23 @@
 ---
-title: "Generación de BD suelos desde SoilGrids"
+title: "Generación de perfiles zonales virtuales a partir de SoilGrids"
 author: Carlos Guío
 format: html
 ---
 
-Este cuaderno permite crear una base de datos de suelos para SWAT a partir de la base datos de suelos globales de SoilGrids. Se siguen los siguietes pasos:
+Este cuaderno permite crear un set de datos de perfiles de suelo virtuales, de propiedades promedio por unidad cartográfica de suelos (UCS), a partir de la base datos de suelos globales de SoilGrids. Finalmente, se exportan los datos como tabla resumen en el formato de base de datos de SWAT.
+
+Se siguen los siguietes pasos:
 
 1. Descarga de los polígonos de área de estudio y unidades cartográficas (si las hay)
 2. Descarga de programática de datos de SoilGrids para propiedades, resolución y profundidades elegidas.
 3. Cálculo de perfiles promedio por unidad cartográfica
-4. Cálculo de perfiles modales a partir de la variabilidad de datos en el área de estudio
-5. Generación de datos en formato SWAT
+4. Generación de datos en formato SWAT
 
 
 ```{r setup}
+
+# Exporta el cuaderno como script plano .R
+#knitr::purl("01_perfiles_zonales_SoilGrids_SWAT.qmd")
 
 # Para cargar librerias se verifica pacman
 if ("pacman" %in% installed.packages() == FALSE) install.packages("pacman")
@@ -24,17 +28,11 @@ pacman::p_load(char = c(
   "sf", #manipulación de dats espaciales
   "dplyr", #procesamiento de data frames
   "tidyr", #procesamient ode data frames
-  "aqp", #datos de suelos
-  "pbapply" #barra de progreso
+  "pbapply", #barra de progreso
   "ggplot2",  #graficación
   "patchwork", #mosaicos gráficos
-  "wesanderson", #paleta de colores
-  "qs" #escribir y leer rápidamente objetos R
   )
 )
-
-#Paleta de colores
-pal <- wes_palette("Zissou1", 100, type = "continuous")
 
 # Ajusta tamaño de letra para las gráficas que genere el script
 theme(base_size = 14)
@@ -44,7 +42,7 @@ theme(base_size = 14)
 
 ## 1. Carga y homogeneización de datos de polígonos
 
-Los datos de polígonos se requieren para acotar el área de estudio (`poli_estudio`) y pára estimar propiedades dentro de unidades cartográficas (UCS) previamente definidas por el IGAC (`poli_ucs`). Se debe seleccionar el mapa de UCS con la escala mas detallada.
+Los datos de polígonos se requieren para acotar el área de estudio (`poli_estudio`) y pára estimar propiedades dentro de UCS previamente definidas por el IGAC (`poli_ucs`). Se debe seleccionar el mapa de UCS con la escala mas detallada.
 
 ```{r}
 
@@ -146,50 +144,11 @@ plot(stack_sub)
 ```
 
 
-## 3. Extracción de BD SWAT
+## 3. Generación de propiedades por estadística zonal
 
-El modelo SWAT requiere las siguientes columnas:
+Para generar datos de perfiles virtuales representativos se utiliza un método de estadísticas zonales, el cuál debe usarse principalmente cuando los mapas de suelos tengan escalas detalladas y semidetalladas (> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método: por agrupamiento no supervisado (ver script `02_perfiles_agrupamiento_SoilGrids_SWAT`).
 
-* soil_id (ID por polígono de UCS)
-* top (cm)
-* bottom (cm)
-* sand (%)
-* silt (%)
-* clay (%)
-* soc (g/kg o % según el modelo, revisar unidad esperada)
-
-Otras como 
-
-* bulk density (g/cm³)
-* pH
-
-El siguiente bloque genera una tabla de equivalencias, que permite que se haga posteriormente la conversión de unidades.
-
-```{r}
-
-# Tabla de conversión: de unidad de SoilGrids a unidad SWAT
-# Solo propiedades que interesan a SWAT
-
-tabla_conversion_unidades <- tibble::tribble(
-  ~property,     ~unidad_soilgrids, ~unidad_swat, ~factor_conversion, ~nota,
-  "sand",        "g/kg",            "%",           0.1,               "Dividir entre 10",
-  "silt",        "g/kg",            "%",           0.1,               "Dividir entre 10",
-  "clay",        "g/kg",            "%",           0.1,               "Dividir entre 10",
-  "soc",         "dg/kg",           "g/kg",        10,                "Multiplicar por 10",
-  "bdod",        "cg/cm³",          "g/cm³",       0.01,              "Dividir entre 100",
-  "phh2o",       "pH x10",          "pH",          0.1,               "Dividir entre 10",
-  "cec",         "mmol(c)/kg",      "cmol(+)/kg",  0.1,               "Dividir entre 10",
-  "nitrogen",    "cg/kg",           "g/kg",        0.01,              "Dividir entre 100"
-)
-
-tabla_conversion_unidades
-
-```
-
-
-Para generar datos de perfiles virtuales representativos presentamos  dos métodos. El método basado en estadística zonal se debe usar principalmente cuando los mapas de suelos tengan escalas detalladas y semidetalladas (> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método de propiedades: por agrupamiento no supervisado.
-
-### 3.1 Propiedades por estadística zonal 
+### 3.1 Cálculo de propiedades promedio por polígono de UCS 
 
 
 Con este método se calculan perfiles promedio por polígono. La tabla resultante debe procesarse posteriormente para ajustarse al formato de SWAT.
@@ -243,7 +202,47 @@ tabla_long <- tabla_zonal %>%
 ```
 
 
-Se hace la conversión de unidades
+### 3.2 Ajuste a formato SWAT
+
+El modelo SWAT requiere las siguientes columnas:
+
+* soil_id (ID por polígono de UCS)
+* top (cm)
+* bottom (cm)
+* sand (%)
+* silt (%)
+* clay (%)
+* soc (g/kg o % según el modelo, revisar unidad esperada)
+
+Otras como 
+
+* bulk density (g/cm³)
+* pH
+
+El siguiente bloque genera una tabla de equivalencias, que permite que se haga posteriormente la conversión de unidades.
+
+```{r}
+
+# Tabla de conversión: de unidad de SoilGrids a unidad SWAT
+# Solo propiedades que interesan a SWAT
+
+tabla_conversion_unidades <- tibble::tribble(
+  ~property,     ~unidad_soilgrids, ~unidad_swat, ~factor_conversion, ~nota,
+  "sand",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "silt",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "clay",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "soc",         "dg/kg",           "g/kg",        10,                "Multiplicar por 10",
+  "bdod",        "cg/cm³",          "g/cm³",       0.01,              "Dividir entre 100",
+  "phh2o",       "pH x10",          "pH",          0.1,               "Dividir entre 10",
+  "cec",         "mmol(c)/kg",      "cmol(+)/kg",  0.1,               "Dividir entre 10",
+  "nitrogen",    "cg/kg",           "g/kg",        0.01,              "Dividir entre 100"
+)
+
+tabla_conversion_unidades
+
+```
+
+Se hace la conversión de unidades reportadas por SoilGrids a las que reuiqere SWAT.
 
 ```{r}
 
@@ -288,8 +287,6 @@ soil_swat <- get_usersoil_table(
 write_usersoil_table(soil_swat, file = "usersoil.txt")
 
 ```
-
-### 3.2 Propiedades por agrupamiento no supervisado
 
 
 

@@ -1,0 +1,141 @@
+---
+title: "Generación de perfiles virtuales por agrupamiento no supervisado a partir de SoilGrids"
+author: Carlos Guío
+format: html
+---
+
+Este cuaderno permite crear un set de datos de perfiles de suelo virtuales, de propiedades agrupadas de forma no supervisada, a partir de la base datos de suelos globales de SoilGrids. Finalmente, se exportan los datos como tabla resumen en el formato de base de datos de SWAT.
+
+Se siguen los siguietes pasos:
+
+1. Descarga de los polígonos de área de estudio y unidades cartográficas (si las hay)
+2. Descarga de programática de datos de SoilGrids para propiedades, resolución y profundidades elegidas.
+3. Agrupamiento de perfiles usando clustering espacial multivariado
+4. Cálculo de perfiles modales del grupo
+5. Generación de datos en formato SWAT
+
+
+```{r setup}
+
+# Exporta el cuaderno como script plano .R
+#knitr::purl("02_perfiles_agrupamiento_SoilGrids_SWAT.qmd")
+
+# Para cargar librerias se verifica pacman
+if ("pacman" %in% installed.packages() == FALSE) install.packages("pacman")
+
+# Se cargan las librerias
+pacman::p_load(char = c(
+  "here", #manejo de rutas
+  "sf", #manipulación de dats espaciales
+  "dplyr", #procesamiento de data frames
+  "tidyr", #procesamient ode data frames
+  "aqp", #datos de suelos
+  "pbapply", #barra de progreso
+  "ggplot2",  #graficación
+  "patchwork" #mosaicos gráficos
+  )
+)
+
+
+# Ajusta tamaño de letra para las gráficas que genere el script
+theme(base_size = 14)
+
+```
+
+
+## 1. Carga y homogeneización de datos de polígonos
+
+Los datos de polígonos se requieren para acotar el área de estudio (`poli_estudio`) 
+
+```{r}
+
+# Descarga polígono de área de estudio
+poli_estudio <- st_read(here("Perfiles_SoilGrids", "Data", "poligono_tocaima.geojson"))
+
+# Transformar ambos al CRS nativo de SoilGrids (IGH: EPSG:54052)
+wkt_igh <- '+proj=igh +lat_0=0 +lon_0=0 +datum=WGS84 +units=m +no_defs'
+poli_estudio_igh <- st_transform(poli_estudio, wkt_igh)
+
+
+#Verifica visualmente
+plot(poli_estudio_igh)
+
+```
+
+## 2. Carga y validación de datos SoilGrids
+
+Descarga datos SoilGrids (la función entrega un SpatRaster en IGH). Esto se realiza llamando a una función externa `00_funcion_descarga_soilgrids.R`, que debe estar dentro del mismo directorio de trabajo actual. Verificar con `getwd()`.
+
+```{r}
+
+# La descripción de los argumentos se encuentra en el script de la función
+source("00_funcion_descarga_soilgrids.R")
+
+# Se descargan los archivos si no se encuentrar en la carpeta
+stack_suelo <- descargar_soilgrids_stack(
+  vars = c("sand", "silt", "clay", "soc", "bdod"),
+  depths = c("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm"),
+  stats = c("mean"),
+  resolucion = c(250, 250),
+  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "SoilGrids_vrt") #para guardar los archivos
+)
+
+```
+
+
+## 2. Carga de datos de SoilGrids
+
+Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre. 
+
+Las propiedades así como los intervalos de profundidad que se eligen deben ser coherentes con el propósito del modelo y la información previa. Si en los polígonos de UCS se reportan oxisoles (sufijo *'oxs'*), ultisoles (sufijo *'ults'*), alfisoles (sufijo *'alfs'*) o andisoles (sufijo *'ands'*), deben considerarse las profundidades máximas. Si se presentan solo entisoles (sufijo *'ents'*) e inceptisoles (sufijo *'epts'*) puede trabajarse con profundidades máximas de 30 a 60 cm (verificar en la memoria de suelos).
+
+Las propiedades de [SoilGrids se reportan según las siguientes unidades](https://www.isric.org/explore/soilgrids/faq-soilgrids#What_do_the_filename_codes_mean):
+
+* bdod (Densidad aparente de la fracción fina del suelo): **cg/cm³**
+* cec (Capacidad de intercambio catiónico del suelo): **mmol(c)/kg**
+* cfvo (Fracción volumétrica de fragmentos gruesos (> 2 mm)): **cm³/dm³**
+* clay (Proporción de partículas de arcilla (< 0.002 mm) en la fracción fina): **g/kg**
+* nitrogen (Nitrógeno total (N)): **cg/kg**
+* phh2o (pH del suelo en agua): **pH x10**
+* sand (Proporción de partículas de arena (> 0.05/0.063 mm) en la fracción fina): **g/kg**
+* silt (Proporción de partículas de limo (≥ 0.002 mm y ≤ 0.05/0.063 mm) en la fracción fina): **g/kg**
+* soc (Contenido de carbono orgánico del suelo en la fracción fina):**dg/kg**
+* ocd (Densidad de carbono orgánico): **hg/m³**
+* ocs (Reservas de carbono orgánico): **t/ha**
+
+```{r carga}
+
+# Crea un objeto tipo función al ejecutar un  script externo
+source("00_funcion_descarga_soilgrids.R")
+
+# Se llama la función con los argumentos adaptados al proyecto
+stack_suelo_medias <- descargar_soilgrids_stack(
+  vars = c("sand", "silt", "clay", "soc"),
+  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm", "100-200cm"),
+  stats = c("mean"),
+  resolucion = c(250, 250)
+)
+
+```
+
+Se valida que los archivos se cargaron correctamente. 
+
+```{r}
+
+# Validación rápida: nombres y visual
+print(names(stack_suelo))
+
+# Selecciona algunas capas por número de índice
+stack_sub <- stack_suelo[[c(1, 8, 15, 22)]]
+
+# Grafica solo esas capas (en un mismo panel multi-cuadro)
+plot(stack_sub)
+
+```
+
+
+## 3. Generación de propiedades por agrupamiento no supervisado
+
+Para generar datos de perfiles virtuales representativos se utiliza un método de agrupamiento no supervisado, el cuál debe usarse principalmente cuando los mapas de suelos tengan escalas semidetalladas o generales (< 1:100.000), para las cuales los mapas de UCS del IGAC presentan una incertidumbre alta por polígono. Para las escalas más detalladas, se sugiere contrastar el resultado del agrupamiento con el -segundo- método: por estadística zonal (ver script `01_perfiles_zonales_SoilGrids_SWAT`).
+
+
