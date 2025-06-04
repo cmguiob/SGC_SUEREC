@@ -1,10 +1,10 @@
-<table style="border-collapse: collapse; border: none; width: 100%;">
-  <tr style="border: none;">
-    <td style="border: none; text-align: left; vertical-align: middle;">
+<table border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%;">
+  <tr>
+    <td style="text-align: left; vertical-align: middle; border: none;">
       <h1 style="margin: 0;">SueRec</h1>
     </td>
-    <td style="border: none; text-align: right; vertical-align: middle;">
-      <img src="LOGO_SGC.png" alt="Logo" width="80" style="margin: 0;"/>
+    <td style="text-align: right; vertical-align: middle; border: none;">
+      <img src="LOGO_SGC.png" alt="Logo" width="80" style="margin: 0; border: none;"/>
     </td>
   </tr>
 </table>
