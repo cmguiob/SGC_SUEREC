@@ -1,0 +1,80 @@
+<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.26.3-Buenos Aires">
+  <identifier>SUELOS_QUINDIO_VF</identifier>
+  <parentidentifier></parentidentifier>
+  <language>SPA</language>
+  <type>dataset</type>
+  <title>SUELOS_QUINDIO_VF</title>
+  <abstract>Mapa temático que representa la distribución de las características del suelo, determinadas mediante el levantamiento general de suelos del departamento de Quindio a escala 1:100.000, publicado el año 1998. Suministra información importante acerca del recurso suelo, a través de la descripción e interpretación de sus ambientes edafogenéticos, sus características físicas, químicas, mineralógicas y morfológicas, su taxonomía y distribución espacial, como base para la determinación de sus potenciales productivos, describiendo las limitantes de uso.
+
+Los levantamientos agrológicos de tipo general se orientan a proporcionar información del recurso suelo para apoyar los procesos de planificación y Ordenamiento Territorial, análisis de las cuencas hidrográficas y amenazas naturales, para que la tierra tengan un uso y manejo adecuado, sin riesgo de deteriorar los recursos naturales disponibles y con el criterio de sostenibilidad.</abstract>
+  <keywords vocabulary="Buscar claves">
+    <keyword>Levantamiento de suelos</keyword>
+    <keyword>Departamento de Quindio</keyword>
+    <keyword>República de Colombia</keyword>
+    <keyword>Taxonomía de suelos</keyword>
+    <keyword>Geomorfología</keyword>
+    <keyword>Suelos</keyword>
+    <keyword>Material parental</keyword>
+    <keyword>Paisaje</keyword>
+  </keywords>
+  <keywords vocabulary="gmd:topicCategory">
+    <keyword>Levantamiento de suelos</keyword>
+    <keyword>Taxonomía de suelos</keyword>
+    <keyword>Geomorfología</keyword>
+    <keyword>Suelos</keyword>
+    <keyword>Material parental</keyword>
+    <keyword>Paisaje</keyword>
+  </keywords>
+  <contact>
+    <contactAddress>
+      <type></type>
+      <address>Carrera 30 # 48 - 51 – Sede Central</address>
+      <city>Bogotá D.C</city>
+      <administrativearea>Departamento de Cundinamarca</administrativearea>
+      <postalcode>111321</postalcode>
+      <country>República de Colombia</country>
+    </contactAddress>
+    <name></name>
+    <organization>Instituto Geográfico Agustín Codazzi- Subdirección de Agrología - Grupo Interno de Trabajo Geomática -</organization>
+    <position>Subdirector de Agrología</position>
+    <voice>+57 1 8000915570</voice>
+    <fax></fax>
+    <email>german.alvarez@igac.gov.co</email>
+    <role></role>
+  </contact>
+  <links/>
+  <history>La generación del Mapa Digital de Suelos, para el levantamiento general de suelos, escala 1:100.000, se realizó a partir de los parámetros definidos por la Subdirección de Agrología del Instituto Geográfico Agustín Codazzi, para el objeto: Suelos. Para la elaboración del levantamiento, el GIT de Levantamientos de Suelos y Aplicaciones Agrológicas, en la etapa de precampo recopiló información secundaria proveniente de estudios de suelos anteriores, e investigaciones sobre los factores formadores del suelo, tales como clima, geología y geomorfología, los cuales se interpretan con el apoyo de insumos de cartografía, sensores remotos y fotointerpretación. Posteriormente, en la etapa de campo se realiza la descripción de las observaciones tipo cajuelas o barrenaje, y calicatas, ajuste a las líneas de interpretación y recolección de muestras que serán analizadas por el Laboratorio Nacional de Suelos. La sistematización y georreferenciación de esta información sirve de apoyo fundamental para el trazo de las líneas de suelos, que son digitalizadas sobre cartografía base, imágenes de sensores remotos, modelos digitales de elevación, entre otros. Finalmente en la etapa de poscampo se consolidó la leyenda de suelos del estudio, la cartografía temática con sus diferentes atributos y la memoria técnica respectiva.</history>
+  <fees></fees>
+  <constraints type="Limitaciones de uso">Licencia no restringida</constraints>
+  <rights>No aplica</rights>
+  <encoding></encoding>
+  <crs>
+    <spatialrefsys nativeFormat="Wkt">
+      <wkt>PROJCRS["MAGNA-SIRGAS / Colombia Bogota zone",BASEGEOGCRS["MAGNA-SIRGAS",DATUM["Marco Geocentrico Nacional de Referencia",ELLIPSOID["GRS 1980",6378137,298.257222101,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4686]],CONVERSION["Colombia MAGNA Bogota zone",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",4.59620041666667,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8801]],PARAMETER["Longitude of natural origin",-74.0775079166667,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8802]],PARAMETER["Scale factor at natural origin",1,SCALEUNIT["unity",1],ID["EPSG",8805]],PARAMETER["False easting",1000000,LENGTHUNIT["metre",1],ID["EPSG",8806]],PARAMETER["False northing",1000000,LENGTHUNIT["metre",1],ID["EPSG",8807]]],CS[Cartesian,2],AXIS["northing (N)",north,ORDER[1],LENGTHUNIT["metre",1]],AXIS["easting (E)",east,ORDER[2],LENGTHUNIT["metre",1]],USAGE[SCOPE["Engineering survey, topographic mapping (large scale)."],AREA["Colombia - onshore between 1°30'W and 1°30'E of Bogota (75°35'W and 72°35'W of Greenwich)."],BBOX[-2.51,-75.59,11.82,-72.58]],USAGE[SCOPE["Topographic mapping (small scale)."],AREA["Colombia - mainland onshore."],BBOX[-4.23,-79.1,12.52,-66.87]],ID["EPSG",3116]]</wkt>
+      <proj4>+proj=tmerc +lat_0=4.59620041666667 +lon_0=-74.0775079166667 +k=1 +x_0=1000000 +y_0=1000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs</proj4>
+      <srsid>1079</srsid>
+      <srid>3116</srid>
+      <authid>EPSG:3116</authid>
+      <description>MAGNA-SIRGAS / Colombia Bogota zone</description>
+      <projectionacronym>tmerc</projectionacronym>
+      <ellipsoidacronym>EPSG:7019</ellipsoidacronym>
+      <geographicflag>false</geographicflag>
+    </spatialrefsys>
+  </crs>
+  <extent>
+    <spatial minz="0" maxx="-75.3662000000000063" maxy="4.85020000000000007" crs="EPSG:3116" miny="4.0506000000000002" dimensions="2" minx="-75.92650000000000432" maxz="0"/>
+    <temporal>
+      <period>
+        <start>1999-01-01T05:00:00Z</start>
+        <end></end>
+      </period>
+    </temporal>
+    <temporal>
+      <period>
+        <start></start>
+        <end></end>
+      </period>
+    </temporal>
+  </extent>
+</qgis>
