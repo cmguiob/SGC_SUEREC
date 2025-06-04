@@ -1,7 +1,7 @@
-<div style="display: flex; justify-content: space-between; align-items: center;">
-  <h1 style="margin: 0;">SueRec</h1>
-  <img src="LOGO_SGC.png" alt="Logo" width="80" style="margin: 0;"/>
-</div>
+<h1>
+  SueRec
+  <img src="LOGO_SGC.png" alt="Logo" width="80" align="right" style="margin-left: 10px;"/>
+</h1>
 
 
 ## Un repositorio orientado a aplicaciones del Servicio Geológico Colombiano
