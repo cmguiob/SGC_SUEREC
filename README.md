@@ -1,4 +1,9 @@
-# SUEREC
+<table>
+<tr>
+  <td><h1>SueRec</h1></td>
+  <td align="right"><img src="assets/logo.png" alt="Logo" width="80"/></td>
+</tr>
+</table>
 
 
 ## Un repositorio orientado a aplicaciones del Servicio Geológico Colombiano
