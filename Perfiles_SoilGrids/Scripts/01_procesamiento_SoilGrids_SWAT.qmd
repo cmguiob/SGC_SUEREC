@@ -99,7 +99,21 @@ stack_suelo <- descargar_soilgrids_stack(
 
 Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre. 
 
-Las propiedades así como los intervalos de profundidad que se eligen deben ser coherentes con el propósito del modelo y la información previa. Si en los polígonos de UCS se reportan oxisoles (sufijo *'oxs'*), ultisoles (sufijo *'ults'*), alfisoles (sufijo *'alfs'*) o andisoles (sufijo *'ands'*), deben considerarse las profundidades máximas. Si se presentan solo entisoles (sufijo *'ents'*) e inceptisoles (sufijo *'epts'*) puede trabajarse con profundidades máximas de 30 a 60 cm (verificar en la memoria de suelos). 
+Las propiedades así como los intervalos de profundidad que se eligen deben ser coherentes con el propósito del modelo y la información previa. Si en los polígonos de UCS se reportan oxisoles (sufijo *'oxs'*), ultisoles (sufijo *'ults'*), alfisoles (sufijo *'alfs'*) o andisoles (sufijo *'ands'*), deben considerarse las profundidades máximas. Si se presentan solo entisoles (sufijo *'ents'*) e inceptisoles (sufijo *'epts'*) puede trabajarse con profundidades máximas de 30 a 60 cm (verificar en la memoria de suelos).
+
+Las propiedades de [SoilGrids se reportan según las siguientes unidades](https://www.isric.org/explore/soilgrids/faq-soilgrids#What_do_the_filename_codes_mean):
+
+* bdod (Densidad aparente de la fracción fina del suelo): **cg/cm³**
+* cec (Capacidad de intercambio catiónico del suelo): **mmol(c)/kg**
+* cfvo (Fracción volumétrica de fragmentos gruesos (> 2 mm)): **cm³/dm³**
+* clay (Proporción de partículas de arcilla (< 0.002 mm) en la fracción fina): **g/kg**
+* nitrogen (Nitrógeno total (N)): **cg/kg**
+* phh2o (pH del suelo en agua): **pH x10**
+* sand (Proporción de partículas de arena (> 0.05/0.063 mm) en la fracción fina): **g/kg**
+* silt (Proporción de partículas de limo (≥ 0.002 mm y ≤ 0.05/0.063 mm) en la fracción fina): **g/kg**
+* soc (Contenido de carbono orgánico del suelo en la fracción fina):**dg/kg**
+* ocd (Densidad de carbono orgánico): **hg/m³**
+* ocs (Reservas de carbono orgánico): **t/ha**
 
 ```{r carga}
 
@@ -134,29 +148,46 @@ plot(stack_sub)
 
 ## 3. Extracción de BD SWAT
 
-A continuació se generan las tablas insumo para la base de datos de suelos de SWAT. Las columnas requeridas son:
+El modelo SWAT requiere las siguientes columnas:
 
 * soil_id (ID por polígono de UCS)
-
 * top (cm)
-
 * bottom (cm)
-
 * sand (%)
-
 * silt (%)
-
 * clay (%)
-
-* soc (g/kg o % según el modelo, revisa unidad esperada)
+* soc (g/kg o % según el modelo, revisar unidad esperada)
 
 Otras como 
 
 * bulk density (g/cm³)
-
 * pH
 
-Para esto se presentan dos métodos. El método basado en estadística zonal se sugiere principalmente cuando se usen como referencia mapas de suelos a escalas detalladas y semidetalladas (> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método de propiedades por agrupamiento no supervisado.
+El siguiente bloque genera una tabla de equivalencias, que permite que se haga posteriormente la conversión de unidades.
+
+```{r}
+
+# Tabla de conversión: de unidad de SoilGrids a unidad SWAT
+# Solo propiedades que interesan a SWAT
+
+tabla_conversion_unidades <- tibble::tribble(
+  ~property,     ~unidad_soilgrids, ~unidad_swat, ~factor_conversion, ~nota,
+  "sand",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "silt",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "clay",        "g/kg",            "%",           0.1,               "Dividir entre 10",
+  "soc",         "dg/kg",           "g/kg",        10,                "Multiplicar por 10",
+  "bdod",        "cg/cm³",          "g/cm³",       0.01,              "Dividir entre 100",
+  "phh2o",       "pH x10",          "pH",          0.1,               "Dividir entre 10",
+  "cec",         "mmol(c)/kg",      "cmol(+)/kg",  0.1,               "Dividir entre 10",
+  "nitrogen",    "cg/kg",           "g/kg",        0.01,              "Dividir entre 100"
+)
+
+tabla_conversion_unidades
+
+```
+
+
+Para generar datos de perfiles virtuales representativos presentamos  dos métodos. El método basado en estadística zonal se debe usar principalmente cuando los mapas de suelos tengan escalas detalladas y semidetalladas (> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método de propiedades: por agrupamiento no supervisado.
 
 ### 3.1 Propiedades por estadística zonal 
 
@@ -210,6 +241,55 @@ tabla_long <- tabla_zonal %>%
   select(soil_id, property, stat, value, top, bottom)
 
 ```
+
+
+Se hace la conversión de unidades
+
+```{r}
+
+tabla_long_swat <- tabla_long|>
+  left_join(tabla_conversion_unidades, by = "property") %>%
+  mutate(
+    value_swat = if_else(!is.na(factor_conversion), value * factor_conversion, value)
+  ) |>
+  select(soil_id, property, stat, value_swat, top, bottom)
+
+```
+
+
+Se transforma de nuevo la tabla de datos a formato ancho, con el fin de tener columnas por propiedad y filas por soil_id y horizonte.
+
+```{r}
+
+# Filtra solo las filas que necesitas: stat == "mean"
+tabla_wide <- tabla_long %>%
+  filter(stat == "mean") %>%
+  select(soil_id, top, bottom, property, value_swat) %>%
+  pivot_wider(names_from = property, values_from = value_swat)
+
+```
+
+Se validan los nombres y formato con SWATprepR, y se exporta la tabla para ingesta en SWAT.
+
+```{r}
+# Valida y estructura para SWAT
+soil_swat <- get_usersoil_table(
+  soil_data    = tabla_wide,
+  soil_id      = "soil_id",
+  layer_top    = "top",
+  layer_bottom = "bottom",
+  sand         = "sand",
+  silt         = "silt",
+  clay         = "clay",
+  soc          = "soc"        
+  # Se puede agregar phh2o, bdod, etc., si están disponibles
+)
+
+write_usersoil_table(soil_swat, file = "usersoil.txt")
+
+```
+
+### 3.2 Propiedades por agrupamiento no supervisado
 
 
 
