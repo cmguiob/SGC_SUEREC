@@ -1,13 +1,7 @@
-<table border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%;">
-  <tr>
-    <td style="text-align: left; vertical-align: middle; border: none;">
-      <h1 style="margin: 0;">SueRec</h1>
-    </td>
-    <td style="text-align: right; vertical-align: middle; border: none;">
-      <img src="LOGO_SGC.png" alt="Logo" width="80" style="margin: 0; border: none;"/>
-    </td>
-  </tr>
-</table>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <h1 style="margin: 0;">SueRec</h1>
+  <img src="LOGO_SGC.png" alt="Logo" width="80" style="margin: 0;"/>
+</div>
 
 
 ## Un repositorio orientado a aplicaciones del Servicio Geológico Colombiano
