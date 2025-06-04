@@ -1,9 +1,6 @@
-<table width="100%">
-<tr>
-  <td><h1>SueRec</h1></td>
-  <td align="right"><img src="LOGO_SGC.png" alt="Logo" width="80"/></td>
-</tr>
-</table>
+<img src="LOGO_SGC.png" alt="Logo" align="right" width="80"/>
+
+# SueRec
 
 
 
