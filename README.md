@@ -1,7 +1,7 @@
 <table width="100%">
 <tr>
-  <td><h1>My Project</h1></td>
-  <td align="right"><img src="assets/logo.png" alt="Logo" width="80"/></td>
+  <td><h1>SueRec</h1></td>
+  <td align="right"><img src="LOGO_SGC.png" alt="Logo" width="80"/></td>
 </tr>
 </table>
 
