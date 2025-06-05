@@ -8,11 +8,10 @@ Este cuaderno permite crear un set de datos de perfiles de suelo virtuales, de p
 
 Se siguen los siguietes pasos:
 
-1. Descarga de los polígonos de área de estudio y unidades cartográficas (si las hay)
-2. Descarga de programática de datos de SoilGrids para propiedades, resolución y profundidades elegidas.
-3. Cálculo de perfiles promedio por unidad cartográfica
-4. Generación de datos en formato SWAT
-
+1.  Descarga de los polígonos de área de estudio y unidades cartográficas (si las hay)
+2.  Descarga de programática de datos de SoilGrids para propiedades, resolución y profundidades elegidas.
+3.  Cálculo de perfiles promedio por unidad cartográfica
+4.  Generación de datos en formato SWAT
 
 ```{r setup}
 
@@ -38,7 +37,6 @@ pacman::p_load(char = c(
 theme(base_size = 14)
 
 ```
-
 
 ## 1. Carga y homogeneización de datos de polígonos
 
@@ -72,46 +70,26 @@ plot(estudio_ucs_clip)
 
 ```
 
-## 2. Carga y validación de datos SoilGrids
-
-Descarga datos SoilGrids (la función entrega un SpatRaster en IGH). Esto se realiza llamando a una función externa `00_funcion_descarga_soilgrids.R`, que debe estar dentro del mismo directorio de trabajo actual. Verificar con `getwd()`.
-
-```{r}
-
-# La descripción de los argumentos se encuentra en el script de la función
-source("00_funcion_descarga_soilgrids.R")
-
-# Se descargan los archivos si no se encuentrar en la carpeta
-stack_suelo <- descargar_soilgrids_stack(
-  vars = c("sand", "silt", "clay", "soc", "bdod"),
-  depths = c("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm"),
-  stats = c("mean"),
-  resolucion = c(250, 250),
-  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "SoilGrids_vrt") #para guardar los archivos
-)
-
-```
-
 
 ## 2. Carga de datos de SoilGrids
 
-Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre. 
+Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre.
 
 Las propiedades así como los intervalos de profundidad que se eligen deben ser coherentes con el propósito del modelo y la información previa. Si en los polígonos de UCS se reportan oxisoles (sufijo *'oxs'*), ultisoles (sufijo *'ults'*), alfisoles (sufijo *'alfs'*) o andisoles (sufijo *'ands'*), deben considerarse las profundidades máximas. Si se presentan solo entisoles (sufijo *'ents'*) e inceptisoles (sufijo *'epts'*) puede trabajarse con profundidades máximas de 30 a 60 cm (verificar en la memoria de suelos).
 
 Las propiedades de [SoilGrids se reportan según las siguientes unidades](https://www.isric.org/explore/soilgrids/faq-soilgrids#What_do_the_filename_codes_mean):
 
-* bdod (Densidad aparente de la fracción fina del suelo): **cg/cm³**
-* cec (Capacidad de intercambio catiónico del suelo): **mmol(c)/kg**
-* cfvo (Fracción volumétrica de fragmentos gruesos (> 2 mm)): **cm³/dm³**
-* clay (Proporción de partículas de arcilla (< 0.002 mm) en la fracción fina): **g/kg**
-* nitrogen (Nitrógeno total (N)): **cg/kg**
-* phh2o (pH del suelo en agua): **pH x10**
-* sand (Proporción de partículas de arena (> 0.05/0.063 mm) en la fracción fina): **g/kg**
-* silt (Proporción de partículas de limo (≥ 0.002 mm y ≤ 0.05/0.063 mm) en la fracción fina): **g/kg**
-* soc (Contenido de carbono orgánico del suelo en la fracción fina):**dg/kg**
-* ocd (Densidad de carbono orgánico): **hg/m³**
-* ocs (Reservas de carbono orgánico): **t/ha**
+-   bdod (Densidad aparente de la fracción fina del suelo): **cg/cm³**
+-   cec (Capacidad de intercambio catiónico del suelo): **mmol(c)/kg**
+-   cfvo (Fracción volumétrica de fragmentos gruesos (\> 2 mm)): **cm³/dm³**
+-   clay (Proporción de partículas de arcilla (\< 0.002 mm) en la fracción fina): **g/kg**
+-   nitrogen (Nitrógeno total (N)): **cg/kg**
+-   phh2o (pH del suelo en agua): **pH x10**
+-   sand (Proporción de partículas de arena (\> 0.05/0.063 mm) en la fracción fina): **g/kg**
+-   silt (Proporción de partículas de limo (≥ 0.002 mm y ≤ 0.05/0.063 mm) en la fracción fina): **g/kg**
+-   soc (Contenido de carbono orgánico del suelo en la fracción fina):**dg/kg**
+-   ocd (Densidad de carbono orgánico): **hg/m³**
+-   ocs (Reservas de carbono orgánico): **t/ha**
 
 ```{r carga}
 
@@ -128,7 +106,7 @@ stack_suelo_medias <- descargar_soilgrids_stack(
 
 ```
 
-Se valida que los archivos se cargaron correctamente. 
+Se valida que los archivos se cargaron correctamente.
 
 ```{r}
 
@@ -143,13 +121,11 @@ plot(stack_sub)
 
 ```
 
-
 ## 3. Generación de propiedades por estadística zonal
 
-Para generar datos de perfiles virtuales representativos se utiliza un método de estadísticas zonales, el cuál debe usarse principalmente cuando los mapas de suelos tengan escalas detalladas y semidetalladas (> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método: por agrupamiento no supervisado (ver script `02_perfiles_agrupamiento_SoilGrids_SWAT`).
+Para generar datos de perfiles virtuales representativos se utiliza un método de estadísticas zonales, el cuál debe usarse principalmente cuando los mapas de suelos tengan escalas detalladas y semidetalladas (\> 1:50.000), en los que predominan las consociaciones o asociaciones de fácil diferenciación. Para las escalas más generales, se sugiere contrastar el resultado de la estadística zonal con el -segundo- método: por agrupamiento no supervisado (ver script `02_perfiles_agrupamiento_SoilGrids_SWAT`).
 
-### 3.1 Cálculo de propiedades promedio por polígono de UCS 
-
+### 3.1 Cálculo de propiedades promedio por polígono de UCS
 
 Con este método se calculan perfiles promedio por polígono. La tabla resultante debe procesarse posteriormente para ajustarse al formato de SWAT.
 
@@ -201,23 +177,22 @@ tabla_long <- tabla_zonal %>%
 
 ```
 
-
 ### 3.2 Ajuste a formato SWAT
 
 El modelo SWAT requiere las siguientes columnas:
 
-* soil_id (ID por polígono de UCS)
-* top (cm)
-* bottom (cm)
-* sand (%)
-* silt (%)
-* clay (%)
-* soc (g/kg o % según el modelo, revisar unidad esperada)
+-   soil_id (ID por polígono de UCS)
+-   top (cm)
+-   bottom (cm)
+-   sand (%)
+-   silt (%)
+-   clay (%)
+-   soc (g/kg o % según el modelo, revisar unidad esperada)
 
-Otras como 
+Otras como
 
-* bulk density (g/cm³)
-* pH
+-   bulk density (g/cm³)
+-   pH
 
 El siguiente bloque genera una tabla de equivalencias, que permite que se haga posteriormente la conversión de unidades.
 
@@ -255,7 +230,6 @@ tabla_long_swat <- tabla_long|>
 
 ```
 
-
 Se transforma de nuevo la tabla de datos a formato ancho, con el fin de tener columnas por propiedad y filas por soil_id y horizonte.
 
 ```{r}
@@ -287,6 +261,3 @@ soil_swat <- get_usersoil_table(
 write_usersoil_table(soil_swat, file = "usersoil.txt")
 
 ```
-
-
-
