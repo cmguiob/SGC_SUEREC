@@ -1,7 +1,7 @@
-## ----setup-------------------------------------------------------------------------------------------------------
+## ----setup------------------------------------------------------------------------------------------------
 
 # Exporta el cuaderno como script plano .R
-knitr::purl("01_perfiles_zonales_SoilGrids_SWAT.qmd")
+#knitr::purl("01_perfiles_zonales_SoilGrids_SWAT.qmd")
 
 # Para cargar librerias se verifica pacman
 if ("pacman" %in% installed.packages() == FALSE) install.packages("pacman")
@@ -12,18 +12,20 @@ pacman::p_load(char = c(
   "sf", #manipulación de dats espaciales
   "dplyr", #procesamiento de data frames
   "tidyr", #procesamient ode data frames
-  "pbapply", #barra de progreso
-  "ggplot2",  #graficación
-  "patchwork", #mosaicos gráficos
+  "remotes", #prepara formato SWAT
+  "ggplot2"  #graficación
   )
 )
+
+remotes::install_github("biopsichas/SWATprepR")
+library(SWATprepR)
 
 # Ajusta tamaño de letra para las gráficas que genere el script
 theme(base_size = 14)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
 #Descarga mapa de ucs armonizadas para Colombia, escala 1:100k desde Zenodo
 source(here("Perfiles_SoilGrids", "Scripts", "00_funcion_descarga_ucs_armonizadas_gpkg.R"), encoding = "UTF-8")
@@ -51,38 +53,24 @@ plot(estudio_ucs_clip)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
-
-# La descripción de los argumentos se encuentra en el script de la función
-source("00_funcion_descarga_soilgrids.R")
-
-# Se descargan los archivos si no se encuentrar en la carpeta
-stack_suelo <- descargar_soilgrids_stack(
-  vars = c("sand", "silt", "clay", "soc", "bdod"),
-  depths = c("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm"),
-  stats = c("mean"),
-  resolucion = c(250, 250),
-  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "SoilGrids_vrt") #para guardar los archivos
-)
-
-
-
-## ----carga-------------------------------------------------------------------------------------------------------
+## ----carga------------------------------------------------------------------------------------------------
 
 # Crea un objeto tipo función al ejecutar un  script externo
 source("00_funcion_descarga_soilgrids.R")
 
 # Se llama la función con los argumentos adaptados al proyecto
-stack_suelo_medias <- descargar_soilgrids_stack(
-  vars = c("sand", "silt", "clay", "soc"),
-  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm", "100-200cm"),
+stack_suelo <- descargar_soilgrids_stack(
+  vars = c("bdod", "sand", "silt", "clay", "soc"),
+  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm"),
   stats = c("mean"),
-  resolucion = c(250, 250)
+  resolucion = c(250, 250),
+  #define ruta de descarga y verifica si ya existen los archivos
+  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "OUTPUT_SoilGrids_vrt") 
 )
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
 # Validación rápida: nombres y visual
 print(names(stack_suelo))
@@ -95,24 +83,49 @@ plot(stack_sub)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
-# Transformar UCs a SpatVector
+# Definir la ruta de salida
+out_raster <- here("Perfiles_SoilGrids", "Data", "OUT_stack_soilgrids.tif")
+
+# Verificar si el archivo ya existe antes de escribir
+if (!file.exists(out_raster)) {
+  writeRaster(stack_suelo, filename = out_raster, overwrite = TRUE)
+} else {
+  message("El archivo ya existe, no se sobrescribirá.")
+}
+
+# LEE el .tif guardado —esto ya es solo un archivo físico pequeño
+stack_suelo_tif <- rast(out_raster)
+
+
+## ---------------------------------------------------------------------------------------------------------
+# (Si es necesario) Proyecta el stack a CRS de los UCS
+crs_estudio_ucs <- terra::crs(estudio_ucs_clip)
+
+if (terra::crs(stack_suelo) != crs_estudio_ucs) {
+  stack_suelo_tif <- terra::project(stack_suelo_tif, crs_estudio_ucs, method = "bilinear")
+} else {
+  stack_suelo_tif <- stack_suelo_tif
+}
+
+# Transforma UCS a SpatVector, el formato vectorial de Terra
 estudio_ucs_vect <- vect(estudio_ucs_clip)
 
-#Calculo de estadistica media por polígono y capa con reporte de avance
-tabla_zonal <- pbapply::pblapply(
-  seq_len(nrow(estudio_ucs_vect)),
-  function(i) {
-    terra::extract(stack_suelo, estudio_ucs_vect[i, ], fun = mean, na.rm = TRUE)
-  }
-)
+# Recorta al área de interés
+ext <- terra::ext(estudio_ucs_vect)
+stack_suelo_crop <- terra::crop(stack_suelo_tif, ext)
 
-# Une resultados
-tabla_zonal <- do.call(rbind, tabla_zonal)
+# Verificación
+plot(stack_suelo_crop[[1]])
+plot(estudio_ucs_vect, add = TRUE, border = "white", lwd = 2)
 
-# Extraer estadística media por polígono y capa
-#tabla_zonal <- terra::extract(stack_suelo, estudio_ucs_vect, fun = mean, na.rm = TRUE)
+
+
+## ---------------------------------------------------------------------------------------------------------
+
+# Extracción
+tabla_zonal <- terra::extract(stack_suelo_crop, estudio_ucs_vect, fun=mean, na.rm=TRUE)
 
 # tabla_zonal: una fila por polígono, columnas = capas + ID
 head(tabla_zonal)
@@ -120,16 +133,16 @@ head(tabla_zonal)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
-# 1. Crea soil_id único (con sufijo, si hay duplicados)
-tabla_zonal_id <- tabla_zonal %>%
-  mutate(soil_id = make.unique(soil_id))
+# Crea soil_id único (con sufijo, si hay duplicados)
+#tabla_zonal_id <- tabla_zonal |>
+ # mutate(soil_id = make.unique(soil_id))
 
-# 2. Pivot a formato largo (excluyendo ID y usando solo soil_id único)
+# Pivot a formato largo
 tabla_long <- tabla_zonal %>%
   pivot_longer(
-    cols = -c(ID, soil_id),  # Deja fuera ID y soil_id (solo pivot propiedades)
+    cols = -c(ID),  # Deja fuera ID (solo pivot propiedades)
     names_to = c("property", "depth", "stat"),
     names_pattern = "([a-z]+)_([0-9]+-[0-9]+)cm_(mean|Q0.5|Q0.05|Q0.95|uncertainty)"
   ) %>%
@@ -137,11 +150,11 @@ tabla_long <- tabla_zonal %>%
     top = as.numeric(sub("([0-9]+)-([0-9]+)", "\\1", depth)),
     bottom = as.numeric(sub("([0-9]+)-([0-9]+)", "\\2", depth))
   ) %>%
-  select(soil_id, property, stat, value, top, bottom)
+  select(ID, property, stat, value, top, bottom)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
 # Tabla de conversión: de unidad de SoilGrids a unidad SWAT
 # Solo propiedades que interesan a SWAT
@@ -162,32 +175,32 @@ tabla_conversion_unidades
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
 tabla_long_swat <- tabla_long|>
   left_join(tabla_conversion_unidades, by = "property") %>%
   mutate(
     value_swat = if_else(!is.na(factor_conversion), value * factor_conversion, value)
   ) |>
-  select(soil_id, property, stat, value_swat, top, bottom)
+  select(ID, property, stat, value_swat, top, bottom)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 
 # Filtra solo las filas que necesitas: stat == "mean"
-tabla_wide <- tabla_long %>%
+tabla_wide_swat <- tabla_long_swat %>%
   filter(stat == "mean") %>%
-  select(soil_id, top, bottom, property, value_swat) %>%
+  select(ID, top, bottom, property, value_swat) %>%
   pivot_wider(names_from = property, values_from = value_swat)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------------------
 # Valida y estructura para SWAT
 soil_swat <- get_usersoil_table(
   soil_data    = tabla_wide,
-  soil_id      = "soil_id",
+  soil_id      = "ID",
   layer_top    = "top",
   layer_bottom = "bottom",
   sand         = "sand",
