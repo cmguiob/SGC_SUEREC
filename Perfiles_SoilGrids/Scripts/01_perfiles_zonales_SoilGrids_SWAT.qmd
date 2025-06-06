@@ -28,8 +28,7 @@ pacman::p_load(char = c(
   "dplyr", #procesamiento de data frames
   "tidyr", #procesamient ode data frames
   "pbapply", #barra de progreso
-  "ggplot2",  #graficación
-  "patchwork", #mosaicos gráficos
+  "ggplot2"  #graficación
   )
 )
 
@@ -70,7 +69,6 @@ plot(estudio_ucs_clip)
 
 ```
 
-
 ## 2. Carga de datos de SoilGrids
 
 Se cargan los datos de valores promedio para varias propiedades. Los valores promedio es una de las estadístics reportadas en SoilGrids. Otras opciones son algunos quantiles o la incertidumbre.
@@ -97,11 +95,13 @@ Las propiedades de [SoilGrids se reportan según las siguientes unidades](https:
 source("00_funcion_descarga_soilgrids.R")
 
 # Se llama la función con los argumentos adaptados al proyecto
-stack_suelo_medias <- descargar_soilgrids_stack(
-  vars = c("sand", "silt", "clay", "soc"),
-  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm", "100-200cm"),
+stack_suelo <- descargar_soilgrids_stack(
+  vars = c("bdod", "sand", "silt", "clay", "soc"),
+  depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm"),
   stats = c("mean"),
-  resolucion = c(250, 250)
+  resolucion = c(250, 250),
+  #define ruta de descarga y verifica si ya existen los archivos
+  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "OUTPUT_SoilGrids_vrt") 
 )
 
 ```

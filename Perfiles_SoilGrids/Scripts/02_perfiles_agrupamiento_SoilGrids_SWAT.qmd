@@ -29,12 +29,16 @@ pacman::p_load(char = c(
   "dplyr", #procesamiento de data frames
   "tidyr", #procesamient ode data frames
   "aqp", #datos de suelos
+  "adespatial", #clustering jerarquico espacial
+  "spdep", #grafo de vecinos
+  "viridis", #paleta de colores
   "pbapply", #barra de progreso
   "ggplot2",  #graficación
   "patchwork" #mosaicos gráficos
   )
 )
 
+remotes::install_github("ncss-tech/aqp")
 
 # Ajusta tamaño de letra para las gráficas que genere el script
 theme(base_size = 14)
@@ -86,11 +90,13 @@ Las propiedades de [SoilGrids se reportan según las siguientes unidades](https:
 source("00_funcion_descarga_soilgrids.R")
 
 # Se llama la función con los argumentos adaptados al proyecto
-stack_suelo_medias <- descargar_soilgrids_stack(
+stack_suelo <- descargar_soilgrids_stack(
   vars = c("sand", "silt", "clay", "soc"),
   depths = c("0-5cm", "5-15cm", "15-30cm", "60-100cm", "100-200cm"),
   stats = c("mean"),
-  resolucion = c(250, 250)
+  resolucion = c(250, 250),
+  #define ruta de descarga y verifica si ya existen los archivos
+  ruta_vrt = here::here("Perfiles_SoilGrids", "Data", "OUTPUT_SoilGrids_vrt") 
 )
 
 ```
@@ -113,3 +119,141 @@ plot(stack_sub)
 ## 3. Generación de propiedades por agrupamiento no supervisado
 
 Para generar datos de perfiles virtuales representativos se utiliza un método de agrupamiento no supervisado, el cuál debe usarse principalmente cuando los mapas de suelos tengan escalas semidetalladas o generales (\< 1:100.000), para las cuales los mapas de UCS del IGAC presentan una incertidumbre alta por polígono. Para las escalas más detalladas, se sugiere contrastar el resultado del agrupamiento con el -segundo- método: por estadística zonal (ver script `01_perfiles_zonales_SoilGrids_SWAT`).
+
+### 3.1 Creación de colección de perfiles de suelo
+
+```{r}
+
+# Extrae valores por pixel dentro del polígono
+vals_px <- terra::extract(stack_sub, vect(poli_estudio_igh), cells = TRUE, xy = TRUE)
+
+# Verifica
+head(vals_px)
+```
+
+Formatea los datos para transformarlos en SoilProfileCollection de `aqp`
+
+```{r}
+# Reorganiza a formato largo, selecciona solo "mean"
+vals_px_long <- vals_px |>
+  pivot_longer(
+    cols = matches("_(mean|Q0.5|Q0.05|Q0.95|uncertainty)$"),
+    names_to = c("propiedad", "profundidad", "estadistica"),
+    names_pattern = "([a-z]+)_([0-9]+-[0-9]+)cm_(mean|Q0.5|Q0.05|Q0.95|uncertainty)"
+  ) |>
+  filter(estadistica == "mean") |>
+  mutate(
+    pixel_id = paste0("px_", cell),
+    top = as.numeric(sub("([0-9]+)-([0-9]+)", "\\1", profundidad)),
+    bottom = as.numeric(sub("([0-9]+)-([0-9]+)", "\\2", profundidad))
+  )
+
+# Pasa a ancho para cada pixel (perfil) y horizonte
+vals_px_wide <- vals_px_long %>%
+  select(pixel_id, x, y, top, bottom, propiedad, value) %>%
+  pivot_wider(names_from = propiedad, values_from = value) %>%
+  as.data.frame()
+```
+
+Se crea y verifica visualmente la colección de perfiles virtuales
+
+```{r}
+
+# Crea un nuevo objeto SoilProfileCollection 
+spc <- vals_px_wide
+depths(spc) <- pixel_id ~ top + bottom
+
+# Selección de 5 perfiles aleatorios para verificación
+muestra_perfiles <- spc[sample(1:length(spc), 5), ]
+
+# Genera gradiente de colores
+colores <- viridis(100)
+
+# Grafica
+plot(muestra_perfiles,
+     color = "clay",
+     col.palette = colores)
+```
+
+### 3.2 Agrupamiento restringido espacialmente
+
+Calcula matriz de distancias entre los diferentes perfiles. Se toma como referencia <http://ncss-tech.github.io/AQP/aqp/aqp-profile-dissimilarity.html>
+
+```{r}
+
+# Crear matriz de disimilitud multivariada entre perfiles (profile_compare de aqp) 
+dissim <- aqp::profile_compare(
+  spc,
+  vars = c("sand", "silt", "clay"), # ajusta a tus variables
+  k = 0,                 # da peso a la profundidad -sin sentido para SoilGrids
+  max_d = 200,           # profundidad máxima (cm)
+  replace_na = TRUE,
+  add_soil_flag = TRUE
+)
+```
+
+Hacer la matriz de distancias espaciales
+
+```{r}
+
+# Extrae coordenadas de los perfiles (SOLO si el orden de filas en vals_px_wide y en spc es idéntico) ---
+coords <- vals_px_wide[, c("x", "y")]
+
+# Construye el grafo de vecinos (usando k vecinos más cercanos) ---
+k_vecinos <- 8  # ajusta según tu grid/resolución
+nb <- spdep::knn2nb(spdep::knearneigh(coords, k = k_vecinos))
+edges <- spdep::listw2sn(spdep::nb2listw(nb, style = "B"))[, 1:2]
+
+# Ejecuta clustering jerárquico con restricción espacial
+hc_constr <- constr.hclust(
+  as.dist(dissim),
+  links = edges,
+  coords = coords
+)
+# plot(hc_constr)  # inspeccionar el dendrograma si hay pocos perfiles
+```
+
+Asignación de clusters. FALTA PENSAR EN UNA FORMA DE SELECCIONAR K
+
+```{r}
+
+# Cortar el dendrograma en k clusters (elige k según criterio propio) ---
+n_clusters <- 4  # Cambia según tu validación
+cluster_cut <- cutree(hc_constr, k = n_clusters)
+
+# --- 9. Asignar el cluster a cada perfil en la colección ---
+site(spc)$cluster <- cluster_cut
+```
+
+Visualización de las áreas clusterizadas FALTA EL CÓDIGO PARA VISUALIZAR CLUSTER ESPACIALMENTE
+
+### 3.3 Cálculo de perfiles modales
+
+Los perfiles modales deben graficarse como curvas y poder mostrar la incertidumbre, en forma de bandas
+
+```{r}
+
+# Calcula el perfil modal por cluster, remuestreado a intervalos personalizados ---
+slabs <- c(0, 20, 50, 100, 200)  # define tus horizontes de interés
+
+modal_profiles <- map_dfr(
+  sort(unique(cluster_cut)),
+  function(cl) {
+    slab(
+      subset(spc, cluster == cl),
+      fm = ~ sand + silt + clay + soc + bdod + phh2o,  # ajusta según tus columnas
+      slab.structure = slabs
+    ) %>%
+    mutate(cluster = cl)
+  }
+)
+
+#  Visualización de los perfiles modales de cada cluster 
+ggplot(modal_profiles, aes(x = (top + bottom)/2, y = mean, color = factor(cluster))) +
+  geom_line() +
+  facet_wrap(~ variable, scales = "free_y") +
+  labs(x = "Profundidad (cm)", y = "Valor", color = "Cluster") +
+  theme_bw()
+```
+
+## 4. Generación de tabla para SWAT

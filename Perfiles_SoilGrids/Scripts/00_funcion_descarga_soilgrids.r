@@ -60,20 +60,20 @@ descargar_soilgrids_stack <- function(vars = c("sand", "bdod"),
                                       depths = c("0-5cm", "15-30cm"),
                                       stats = c("mean"),
                                       resolucion = c(250, 250),
-                                      ruta_vrt = "SoilGrids_vrt") {
+                                      ruta_vrt = "OUTPUT_SoilGrids_vrt") {
   
-  if (!dir.exists(ruta_vrt)) dir.create(ruta_vrt, recursive = TRUE)
-  
-  
-  # -------------------------------------------
+   # -------------------------------------------
   # 0. Carga o instala los paquetes necesarios
   # -------------------------------------------
   if (!"pacman" %in% installed.packages()[, "Package"]) install.packages("pacman")
-  pacman::p_load("terra", "gdalUtilities")
+  pacman::p_load("terra", "gdalUtilities", "here")
   
   # ----------------------------
   # 1. Validación de parámetros
   # ----------------------------
+  
+  #Verifica si los archivos ya existen
+  if (!dir.exists(ruta_vrt)) dir.create(ruta_vrt, recursive = TRUE)
   
   # Lista de variables, produndidades y estadísticas validas en SoilGrids 
   vars_validas <- c("bdod", "cec", "cfvo", "clay", "silt", "sand", 
