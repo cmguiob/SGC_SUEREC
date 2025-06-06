@@ -1,6 +1,6 @@
 ---
 title: "Generación de perfiles zonales virtuales a partir de SoilGrids"
-author: Carlos Guío
+author: Carlos M. Guío Blanco
 format: html
 ---
 
@@ -127,26 +127,39 @@ Para generar datos de perfiles virtuales representativos se utiliza un método d
 
 ### 3.1 Cálculo de propiedades promedio por polígono de UCS
 
+Para acelerar el cálculo se sugiere recortar y guardar el archivo tif localmente. Esto se hace si no hay interferencia con GDAL
+
+```{r}
+# (Si es necesario) Proyecta el stack a CRS de los UCS
+crs_estudio_ucs <- terra::crs(estudio_ucs_vect)
+if (terra::crs(stack_suelo) != crs_estudio_ucs) {
+  stack_suelo_proj <- terra::project(stack_suelo, crs_estudio_ucs, method = "bilinear")
+} else {
+  stack_suelo_proj <- stack_suelo
+}
+
+# Recorta al área de interés
+ext <- terra::ext(estudio_ucs_vect)
+stack_suelo_crop <- terra::crop(stack_suelo_proj, ext)
+
+# GUARDA el recorte como .tif único
+writeRaster(stack_suelo_crop, "stack_suelo_crop.tif", overwrite=TRUE)
+
+# 4. LEE el .tif guardado — esto ya es solo un archivo físico pequeño
+stack_suelo_tif <- rast("stack_suelo_crop.tif")
+
+
+```
+
 Con este método se calculan perfiles promedio por polígono. La tabla resultante debe procesarse posteriormente para ajustarse al formato de SWAT.
 
 ```{r}
 
-# Transformar UCs a SpatVector
+# Transformar UCs a SpatVector. Este se usa para extraer estadísticas por polígono
 estudio_ucs_vect <- vect(estudio_ucs_clip)
 
-#Calculo de estadistica media por polígono y capa con reporte de avance
-tabla_zonal <- pbapply::pblapply(
-  seq_len(nrow(estudio_ucs_vect)),
-  function(i) {
-    terra::extract(stack_suelo, estudio_ucs_vect[i, ], fun = mean, na.rm = TRUE)
-  }
-)
-
-# Une resultados
-tabla_zonal <- do.call(rbind, tabla_zonal)
-
-# Extraer estadística media por polígono y capa
-#tabla_zonal <- terra::extract(stack_suelo, estudio_ucs_vect, fun = mean, na.rm = TRUE)
+# 5. Ahora sí, extracción zonal eficiente
+tabla_zonal <- terra::extract(stack_suelo_tif, estudio_ucs_vect, fun=mean, na.rm=TRUE)
 
 # tabla_zonal: una fila por polígono, columnas = capas + ID
 head(tabla_zonal)
@@ -158,11 +171,11 @@ Se transforma la tabla zonal a formato largo. Se crean columnas de acuerdo a los
 
 ```{r}
 
-# 1. Crea soil_id único (con sufijo, si hay duplicados)
+# Crea soil_id único (con sufijo, si hay duplicados)
 tabla_zonal_id <- tabla_zonal %>%
   mutate(soil_id = make.unique(soil_id))
 
-# 2. Pivot a formato largo (excluyendo ID y usando solo soil_id único)
+# Pivot a formato largo (excluyendo ID y usando solo soil_id único)
 tabla_long <- tabla_zonal %>%
   pivot_longer(
     cols = -c(ID, soil_id),  # Deja fuera ID y soil_id (solo pivot propiedades)
