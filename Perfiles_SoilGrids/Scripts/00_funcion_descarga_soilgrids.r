@@ -60,7 +60,7 @@ descargar_soilgrids_stack <- function(vars = c("sand", "bdod"),
                                       depths = c("0-5cm", "15-30cm"),
                                       stats = c("mean"),
                                       resolucion = c(250, 250),
-                                      ruta_vrt = "OUTPUT_SoilGrids_vrt") {
+                                      ruta_vrt = "OUT_SoilGrids_vrt") {
   
    # -------------------------------------------
   # 0. Carga o instala los paquetes necesarios
