@@ -1,4 +1,4 @@
-## ----setup-------------------------------------------------------------------------------------------------------
+## ----setup--------------------------------------------------------------------------------------------------
 
 # Exporta el cuaderno como script plano .R
 #knitr::purl("01_perfiles_zonales_SoilGrids_SWAT.qmd")
@@ -8,6 +8,7 @@ if ("pacman" %in% installed.packages() == FALSE) install.packages("pacman")
 
 # Se cargan las librerias
 pacman::p_load(char = c(
+  "Rdpack", #dependencia
   "here", #manejo de rutas
   "sf", #manipulación de dats espaciales
   "dplyr", #procesamiento de data frames
@@ -15,7 +16,6 @@ pacman::p_load(char = c(
   "terra", #manejo de raster
   "remotes", #carga de librerias
   "devtools", #carga de librerias 
-  "Rdpack", #dependencia
   "ggplot2"  #graficación
   )
 )
@@ -32,7 +32,7 @@ theme(base_size = 14)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 #Descarga mapa de ucs armonizadas para Colombia, escala 1:100k desde Zenodo
 source(here::here("Perfiles_SoilGrids", "Scripts", "00_funcion_descarga_ucs_armonizadas_gpkg.R"), encoding = "UTF-8")
@@ -58,14 +58,15 @@ estudio_ucs_clip <- poli_ucs_igh |>
   dplyr::mutate(
     ID      = row_number(),              # 1, 2, 3, …
     soil_id = sprintf("SOIL_%04d", ID)   # "SOIL_0001", "SOIL_0002", …
-  )
+  ) |>
+  select(-id)
 
 #Verifica visualmente
 plot(estudio_ucs_clip)
 
 
 
-## ----carga-------------------------------------------------------------------------------------------------------
+## ----carga--------------------------------------------------------------------------------------------------
 
 # Crea un objeto tipo función al ejecutar un  script externo
 source("00_funcion_descarga_soilgrids.R")
@@ -82,7 +83,7 @@ stack_suelo <- descargar_soilgrids_stack(
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Validación rápida: nombres y visual
 print(names(stack_suelo))
@@ -95,7 +96,7 @@ plot(stack_sub)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Definir la ruta de salida
 out_raster <- here::here("Perfiles_SoilGrids", "Data", "OUT_stack_soilgrids.tif")
@@ -114,7 +115,8 @@ stack_suelo_tif <- rast(out_raster)
 plot(stack_suelo_tif[[1]])
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
+
 # (Si es necesario) Proyecta el stack a CRS de los UCS
 crs_estudio_ucs <- terra::crs(estudio_ucs_clip)
 
@@ -133,19 +135,18 @@ stack_suelo_crop <- terra::crop(stack_suelo_tif, ext)
 
 # Verificación
 plot(stack_suelo_crop[[1]])
-plot(estudio_ucs_vect, border = "white", lwd = 2)
+plot(estudio_ucs_vect, border = "black", lwd = 2)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Extracción con terra::extract(), une soil_id:
 tabla_zonal <- terra::extract(
   stack_suelo_crop,
   vect(estudio_ucs_clip),
   fun    = mean,
-  na.rm  = TRUE,
-  df     = TRUE
+  na.rm  = TRUE
   ) |>
   # st_drop_geometry() para traer sólo ID + soil_id, desde sf
   left_join(
@@ -161,7 +162,7 @@ head(tabla_zonal)
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Pivot a formato largo, **incluyendo soil_id** desde el primer paso
 tabla_long <- tabla_zonal |>
@@ -182,10 +183,9 @@ tabla_long <- tabla_zonal |>
 
 # Comprueba el resultado
 head(tabla_long, 10)
-str(tabla_long)
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Tabla de conversión: de unidad de SoilGrids a unidad SWAT
 # Solo propiedades que interesan a SWAT
@@ -206,10 +206,10 @@ tabla_conversion_unidades
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 tabla_long_swat <- tabla_long|>
-  left_join(tabla_conversion_unidades, by = "property") %>%
+  left_join(tabla_conversion_unidades, by = "property") |>
   mutate(
     value_swat = if_else(!is.na(factor_conversion), value * factor_conversion, value)
   ) |>
@@ -218,7 +218,7 @@ tabla_long_swat <- tabla_long|>
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Filtra fatos innecesarios, agrega identificador único y reordena columnas
 tabla_wide_swat <- tabla_long_swat |>
@@ -229,15 +229,18 @@ tabla_wide_swat <- tabla_long_swat |>
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
-perfil_wide <- tabla_wide_swat %>%
+perfil_wide <- tabla_wide_swat |>
   # Ordena por soil_id y por la profundidad “top” de cada capa
   arrange(soil_id, top) |>
   # Agrupa por cada perfil de suelo (soil_id) para numerar horizontes
   group_by(soil_id) |>
-  mutate(layer_num = row_number(), #Crea layer_num = 1,2,3… según el orden de top
-         NLAYERS   = n(),) |> # cuenta horizontes por soil_id
+  
+  dplyr::mutate(
+    layer_num = row_number(), #layer_num = 1,2,3… según el orden de top
+    NLAYERS   = n() # cuenta horizontes por soil_id
+    ) |> 
   ungroup() |>
   # Selecciona y renombra las columnas que SWATprepR necesita:
   select(
@@ -261,7 +264,7 @@ perfil_wide <- tabla_wide_swat %>%
 
 
 
-## ----------------------------------------------------------------------------------------------------------------
+## -----------------------------------------------------------------------------------------------------------
 
 # Escribe “perfil_wide” a CSV en archivo temporal para que get_usersoil_table() lo lea:
 ruta_temp <- tempfile(pattern = "perfil_wide_", fileext = ".csv")
@@ -285,17 +288,22 @@ head(usersoil_tbl)
 
 
 
-## ----exporta-----------------------------------------------------------------------------------------------------
+## ----exporta------------------------------------------------------------------------------------------------
 
 # Ruta de salida para el GeoJSON (o cambia la extensión a .shp para Shapefile)
 out_ucspoly <- here::here("Perfiles_SoilGrids", "Data", "OUT_ucs_soil_id.geojson")
 out_soil_tbl <- here::here("Perfiles_SoilGrids", "Data", "OUT_tabla_usersoil.csv")
 
-# Escribe el archivo (delete_dsn = TRUE sobreescribe si ya existiera)
-st_write(
-  estudio_ucs_clip,
+#  Si el fichero ya existe, elimínalo manualmente
+if (file.exists(out_ucspoly)) {
+  file.remove(out_ucspoly)
+}
+
+# Escribe tu GeoJSON limpio
+sf::st_write(
+  estudio_ucs_clip,   # o estudio_ucs_clip2 si filtraste columnas
   out_ucspoly,
-  delete_dsn = TRUE
+  driver     = "GeoJSON"
 )
 
 write.csv(
