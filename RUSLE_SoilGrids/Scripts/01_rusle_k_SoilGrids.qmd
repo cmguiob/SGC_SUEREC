@@ -70,26 +70,62 @@ om <- soc * 1.724
 ```
 
 
-## 5. Cálculo de K usando Williams (1995)
+## 1. Ecuación de Renard et al. (1997) vía Dg (Eq. 3 en Anache et al. 2015)
+
+Esta ecuación estima K a partir del **diámetro geométrico medio** (Dg) de las partículas, aplicando una función tipo gaussiana. Es adecuada para suelos donde se dispone de textura completa. Fue reportada por Renard et al. (1997) y utilizada por Bonilla & Johnson (2012) y Anache et al. (2015).
+
+📘 Referencia: Renard et al. (1997) - [RUSLE Handbook](https://www.ars.usda.gov/ARSUserFiles/60600505/RUSLE/AH_703.pdf)
 
 ```{r}
-k_williams <- (
-  0.2 + 0.3 * exp(-0.0256 * sand * (1 - silt / 100))
-) * (silt / (clay + silt))^0.3
+# Diámetro medio de cada fracción (μm): arena=1000, limo=26, arcilla=1
+log_dg <- (sand * log(1000) + silt * log(26) + clay * log(1)) / 100
+dg <- exp(log_dg)
 
+K_renard <- 0.0034 + 0.0405 * exp(-0.5 * ((log(dg) + 1.659) / 0.7101)^2)
 
-k_si_wiliams <- k_williams * 0.1317 
-
+writeRaster(K_renard, "Data/K_renard_dg.tif", overwrite = TRUE)
 ```
 
-## 7. Exportación de resultados
+## 2. Ecuación de Denardin (1990) (Eq. 5 en Anache et al. 2015)
+
+Propone un cálculo de K usando una combinación de variables texturales: fracciones finas y materia orgánica. Es ampliamente utilizada en Brasil y recomendada para suelos tropicales. Se ha aplicado en estudios regionales con SoilGrids.
+
+📘 Referencia: Denardin, J.E. (1990). *Compactação do solo: causas e efeitos*. EMBRAPA.
 
 ```{r}
+M <- (silt + sand) * (100 - clay)
+K_denardin <- 0.0134 + 0.0027 * M / 10000 - 0.00001 * M^2 / 1e8
 
-writeRaster(k_williams, here("RUSLE_SoilGrids", "Data", "K_williams.tif"), overwrite = TRUE)
+writeRaster(K_denardin, "Data/K_denardin.tif", overwrite = TRUE)
 ```
 
+## 3. Ecuación de Sharpley & Williams (1990) (Eq. 6 en Anache et al. 2015)
 
-## Referencias
+Usada originalmente en el modelo EPIC y luego adoptada en SWAT, esta ecuación permite estimar K usando arena, limo, arcilla y contenido de carbono. Es una de las más sólidas en términos estadísticos para regiones sin datos de estructura.
 
-- Williams, J.R. (1995). The EPIC model. In *Computer Models of Watershed Hydrology*, ed. V.P. Singh, 909–1000. Highlands Ranch, CO: Water Resources Publications.
+📘 Referencia: Sharpley, A.N. & Williams, J.R. (1990). *EPIC-Erosion Productivity Impact Calculator.* USDA Technical Bulletin No. 1768.
+
+```{r}
+# Subecuaciones según Anache et al. (2015), adaptadas de Sharpley & Williams
+fcsand <- 0.2 + 0.3 * exp(-0.0256 * sand * (1 - silt / 100))
+sl_clay <- silt / (clay + silt)
+om_term <- 1 - 0.25 * OM / (OM + exp(3.72 - 2.95 * OM))
+K_sw <- fcsand * sl_clay^0.3 * om_term
+
+# Conversión a unidades SI
+K_sw_SI <- K_sw * 0.1317
+
+writeRaster(K_sw_SI, "Data/K_sharpley_williams.tif", overwrite = TRUE)
+```
+
+## Comparación gráfica
+
+```{r}
+plot(K_renard, main = "K - Renard et al. 1997")
+plot(K_denardin, main = "K - Denardin 1990")
+plot(K_sw_SI, main = "K - Sharpley & Williams 1990")
+```
+
+## Fin del cuaderno
+
+Este cuaderno genera tres estimaciones distintas del factor de erodabilidad K a partir de capas de SoilGrids, cada una con fundamentos empíricos validados. El usuario puede comparar los resultados y decidir cuál utilizar en su modelo SDR o de pérdida de suelo.
