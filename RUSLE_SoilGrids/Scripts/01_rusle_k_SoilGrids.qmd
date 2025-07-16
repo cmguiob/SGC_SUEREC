@@ -1,0 +1,95 @@
+---
+title: "Cálculo del factor de erodabilidad K con SoilGrids"
+author: "Carlos M. Guío Blanco"
+date: "2025-07-15"
+format: html
+editor:
+  markdown:
+    wrap: 80
+---
+
+Este cuaderno calcula el factor de erodabilidad del suelo **K** (en unidades
+métricas: t·ha⁻¹·h·MJ⁻¹·mm⁻¹) a partir de datos de textura, densidad aparente y
+carbono orgánico del suelo proporcionados por **SoilGrids**. Se implementan y
+comparan dos fórmulas publicadas:
+
+1. **Torri et al. (1997)**: basada en textura, materia orgánica y densidad.
+2. **Williams (1995)**: usada en el modelo EPIC/SWAT, basada en textura.
+
+## 1. Carga de librerías y funciones
+
+```{r setup}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  here, sf, terra, dplyr, tidyr, ggplot2
+)
+```
+
+## 2. Lectura del polígono de estudio y definición de CRS
+
+```{r}
+# Cargar polígono geojson
+poli_estudio <- st_read(here("RUSLE_SoilGrids", "Data", "INP_cuenca_rio_barbas.geojson"))
+
+# Transformar a CRS de SoilGrids (IGH: EPSG 54052)
+wkt_igh <- "+proj=igh +lat_0=0 +lon_0=0 +datum=WGS84 +units=m +no_defs"
+poli_estudio_igh <- st_transform(poli_estudio, wkt_igh)
+```
+
+## 3. Descarga y carga de capas de SoilGrids
+
+```{r}
+# Usamos función externa para descarga vía GDAL
+source(here("RUSLE_SoilGrids", "Scripts", "00_funcion_descarga_soilgrids.R"))
+
+stack_soil <- descargar_soilgrids_stack(
+  vars = c("sand", "silt", "clay", "soc", "bdod"),
+  depths = c("0-5cm"),
+  stats = c("mean"),
+  resolucion = c(250, 250),
+  ruta_vrt = here("RUSLE_SoilGrids", "Data", "OUT_SoilGrids_vrt")
+)
+
+# Recorte al área de estudio
+stack_soil_crop <- crop(stack_soil, vect(poli_estudio_igh)) |> 
+  mask(vect(poli_estudio_igh))
+```
+
+## 4. Conversión de unidades
+
+```{r}
+# Extraer y convertir unidades
+sand <- stack_soil_crop[["sand_0-5cm_mean"]] / 10  # g/kg → %
+silt <- stack_soil_crop[["silt_0-5cm_mean"]] / 10
+clay <- stack_soil_crop[["clay_0-5cm_mean"]] / 10
+soc  <- stack_soil_crop[["soc_0-5cm_mean"]] / 10  # dg/kg → %
+bd   <- stack_soil_crop[["bdod_0-5cm_mean"]] / 100  # cg/cm³ → g/cm³
+
+# Materia orgánica a partir de SOC
+om <- soc * 1.724
+```
+
+
+## 5. Cálculo de K usando Williams (1995)
+
+```{r}
+k_williams <- (
+  0.2 + 0.3 * exp(-0.0256 * sand * (1 - silt / 100))
+) * (silt / (clay + silt))^0.3
+
+
+k_si_wiliams <- k_williams * 0.1317 
+
+```
+
+## 7. Exportación de resultados
+
+```{r}
+
+writeRaster(k_williams, here("RUSLE_SoilGrids", "Data", "K_williams.tif"), overwrite = TRUE)
+```
+
+
+## Referencias
+
+- Williams, J.R. (1995). The EPIC model. In *Computer Models of Watershed Hydrology*, ed. V.P. Singh, 909–1000. Highlands Ranch, CO: Water Resources Publications.
