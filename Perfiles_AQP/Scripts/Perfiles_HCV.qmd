@@ -1,0 +1,102 @@
+---
+title: "Perfiles AQP "
+subtitle: "Huella de Ceniza Volcánica - SGC"
+toc: TRUE
+format: html
+---
+
+Este cuaderno presenta un ejemplo reproducible de visualización de perfiles de suelos, como parte del proyecto Huella de Ceniza Volcánica.
+
+## 1. Configuración
+
+
+```{r label = setup, echo = FALSE, messages = FALSE, warnings = FALSE}
+
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+    "aqp",
+    "soilDB",
+    "readxl",
+    "dplyr",
+    "here")
+```
+
+## 2. Lectura de datos
+
+Se cargan los datos de horizontes y sitios de los suelos muestreados.
+
+```{r label = carga, messages = FALSE, warnings = FALSE}
+
+datos <- readxl::read_excel(here::here("Perfiles_AQP", "Data","horizontes.xlsx"))
+
+head(datos)
+
+```
+
+## 3. Pre-procesamiento
+
+Se crean columnas nuevas con los valores RGB a partir de los colores de Munsell
+
+
+```{r label = procesamiento}
+
+datos_procesados <- datos |>
+    # Creamos columnas de datos procesados
+    dplyr::mutate(
+        # Convertir colores Munsell a RGB
+        color_hz = munsell2rgb(
+            the_hue = datos$hue,
+            the_value = datos$value,
+            the_chroma = datos$chroma),
+        # Convertir límites "N/A" a NA reales
+        distinctness = case_when(
+            distinctness == "N/A" ~ NA_character_,
+            TRUE ~ distinctness),
+        topography = case_when(
+            topography == "N/A" ~ NA_character_,
+            TRUE ~ topography),
+        # Asigan valores a categorias de distinctness
+        hzd = case_when(
+            distinctness == "Diffuse" ~ 15,
+            distinctness == "Gradual" ~ 10,
+            distinctness == "Clear" ~ 5,
+            distinctness == "Abrupt" ~ 2,
+            is.na(distinctness) ~ 5,
+            TRUE ~ 5)
+    )
+
+```
+
+
+Creamos la colección de perfiles
+
+
+```{r label = spc}
+
+datos_spc <- datos_procesados
+
+# Crear SoilProfileCollection
+depths(datos_spc) <- id ~ top + bottom
+
+```
+
+## 4. Visualización
+
+Se visualiza la colección de perfiles
+
+
+```{r label = visualizacion}
+
+aqp::plotSPC(
+  datos_spc,
+  name = "name",
+  color = "color_hz",
+  print.id = TRUE,
+  cex.names = 1.5,
+  depth.axis = TRUE,
+  width = 0.4,
+  hz.distinctness.offset = "hzd"  # Aplica el efecto visual del límite
+)
+
+
+```
