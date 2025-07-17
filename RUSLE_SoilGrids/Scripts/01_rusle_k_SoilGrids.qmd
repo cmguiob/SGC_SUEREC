@@ -9,12 +9,11 @@ editor:
 ---
 
 Este cuaderno calcula el factor de erodabilidad del suelo **K** (en unidades
-métricas: t·ha⁻¹·h·MJ⁻¹·mm⁻¹) a partir de datos de textura, densidad aparente y
-carbono orgánico del suelo proporcionados por **SoilGrids**. Se implementan y
-comparan dos fórmulas publicadas:
+métricas: t·ha⁻¹·h·MJ⁻¹·mm⁻¹) a partir de datos de textura y carbono orgánico del 
+suelo proporcionados por **SoilGrids**. Se implementan y comparan dos fórmulas 
+publicadas. El usuario puede comparar los resultados y decidir cuál utilizar en 
+su modelo SDR o de pérdida de suelo.
 
-1. **Torri et al. (1997)**: basada en textura, materia orgánica y densidad.
-2. **Williams (1995)**: usada en el modelo EPIC/SWAT, basada en textura.
 
 ## 1. Carga de librerías y funciones
 
@@ -70,11 +69,11 @@ om <- soc * 1.724
 ```
 
 
-## 1. Ecuación de Renard et al. (1997) vía Dg (Eq. 3 en Anache et al. 2015)
+## 1. Ecuación de Renard et al. (1997) vía Dg.
 
-Esta ecuación estima K a partir del **diámetro geométrico medio** (Dg) de las partículas, aplicando una función tipo gaussiana. Es adecuada para suelos donde se dispone de textura completa. Fue reportada por Renard et al. (1997) y utilizada por Bonilla & Johnson (2012) y Anache et al. (2015).
+Esta ecuación estima K a partir del **diámetro geométrico medio** (Dg) de las partículas, aplicando una función tipo gaussiana. Es adecuada para suelos donde se dispone de textura completa. Fue reportada por Renard et al. (1997): predicting soil erosion by water: a guide to conservation planning with the Revisited Universal Soil Loss Equation (RUSLE)
 
-📘 Referencia: Renard et al. (1997) - [RUSLE Handbook](https://www.ars.usda.gov/ARSUserFiles/60600505/RUSLE/AH_703.pdf)
+📘 Acceso: Renard et al. (1997) - [RUSLE Handbook](https://www.tucson.ars.ag.gov/unit/publications/PDFfiles/717.pdf)
 
 ```{r}
 # Diámetro medio de cada fracción (μm): arena=1000, limo=26, arcilla=1
@@ -83,49 +82,47 @@ dg <- exp(log_dg)
 
 K_renard <- 0.0034 + 0.0405 * exp(-0.5 * ((log(dg) + 1.659) / 0.7101)^2)
 
-writeRaster(K_renard, "Data/K_renard_dg.tif", overwrite = TRUE)
+plot(K_renard)
+
+writeRaster(K_renard, here::here("RUSLE_SoilGrids", "Scripts", "K_renard_dg.tif"), overwrite = TRUE)
 ```
 
-## 2. Ecuación de Denardin (1990) (Eq. 5 en Anache et al. 2015)
+## 2. Ecuación de Denardin (1990)
 
 Propone un cálculo de K usando una combinación de variables texturales: fracciones finas y materia orgánica. Es ampliamente utilizada en Brasil y recomendada para suelos tropicales. Se ha aplicado en estudios regionales con SoilGrids.
 
-📘 Referencia: Denardin, J.E. (1990). *Compactação do solo: causas e efeitos*. EMBRAPA.
+📘 Referencia: Denardin, J.E. (1990). - [Tese Doutorado USO](https://teses.usp.br/teses/disponiveis/11/11140/tde-20230818-145355/pt-br.php)
 
 ```{r}
 M <- (silt + sand) * (100 - clay)
 K_denardin <- 0.0134 + 0.0027 * M / 10000 - 0.00001 * M^2 / 1e8
 
-writeRaster(K_denardin, "Data/K_denardin.tif", overwrite = TRUE)
+plot(K_denardin)
+
+writeRaster(K_denardin, here::here("RUSLE_SoilGrids", "Scripts", "K_denardin.tif"), overwrite = TRUE)
 ```
 
-## 3. Ecuación de Sharpley & Williams (1990) (Eq. 6 en Anache et al. 2015)
+## 3. Ecuación de Sharpley & Williams (1990) 
 
-Usada originalmente en el modelo EPIC y luego adoptada en SWAT, esta ecuación permite estimar K usando arena, limo, arcilla y contenido de carbono. Es una de las más sólidas en términos estadísticos para regiones sin datos de estructura.
+Usada originalmente en el modelo EPIC y luego adoptada en SWAT, esta ecuación permite estimar K usando arena, limo, arcilla y contenido de carbono. Es una de las más sólidas en términos estadísticos para regiones sin datos de estructura del suelo.
 
-📘 Referencia: Sharpley, A.N. & Williams, J.R. (1990). *EPIC-Erosion Productivity Impact Calculator.* USDA Technical Bulletin No. 1768.
+📘 Referencia: Sharpley, A.N. & Williams, J.R. (1990). [EPIC-Erosion Productivity Impact Calculator](https://epicapex.tamu.edu/media/h2gkyznv/epicmodeldocumentation.pdf)
 
 ```{r}
 # Subecuaciones según Anache et al. (2015), adaptadas de Sharpley & Williams
 fcsand <- 0.2 + 0.3 * exp(-0.0256 * sand * (1 - silt / 100))
 sl_clay <- silt / (clay + silt)
-om_term <- 1 - 0.25 * OM / (OM + exp(3.72 - 2.95 * OM))
+om_term <- 1 - 0.25 * om / (om + exp(3.72 - 2.95 * om))
 K_sw <- fcsand * sl_clay^0.3 * om_term
 
 # Conversión a unidades SI
 K_sw_SI <- K_sw * 0.1317
 
-writeRaster(K_sw_SI, "Data/K_sharpley_williams.tif", overwrite = TRUE)
+plot(K_sw_SI)
+
+writeRaster(K_sw_SI, here::here("RUSLE_SoilGrids", "Scripts","K_sharpley_williams.tif"), overwrite = TRUE)
 ```
 
-## Comparación gráfica
+#
 
-```{r}
-plot(K_renard, main = "K - Renard et al. 1997")
-plot(K_denardin, main = "K - Denardin 1990")
-plot(K_sw_SI, main = "K - Sharpley & Williams 1990")
-```
 
-## Fin del cuaderno
-
-Este cuaderno genera tres estimaciones distintas del factor de erodabilidad K a partir de capas de SoilGrids, cada una con fundamentos empíricos validados. El usuario puede comparar los resultados y decidir cuál utilizar en su modelo SDR o de pérdida de suelo.
