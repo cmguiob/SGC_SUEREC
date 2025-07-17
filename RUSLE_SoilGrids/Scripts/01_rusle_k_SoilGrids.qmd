@@ -8,32 +8,59 @@ editor:
     wrap: 80
 ---
 
-Este cuaderno calcula el factor de erodabilidad del suelo **K** (en unidades
-métricas: t·ha⁻¹·h·MJ⁻¹·mm⁻¹) a partir de datos de textura y carbono orgánico del 
-suelo proporcionados por **SoilGrids**. Se implementan y comparan dos fórmulas 
-publicadas. El usuario puede comparar los resultados y decidir cuál utilizar en 
-su modelo SDR o de pérdida de suelo.
+Este cuaderno calcula el factor de erodabilidad del suelo **K** (en unidades métricas: t·ha⁻¹·h·MJ⁻¹·mm⁻¹) a partir de datos de textura y carbono orgánico del suelo proporcionados por **SoilGrids**. Se implementan y comparan tres fórmulas publicadas.
+
+El usuario puede definir el área de estudio usando:
+
+- Un **polígono de referencia** (por ejemplo, una cuenca hidrográfica), que impone el sistema de coordenadas al resultado;
+- Un **raster de referencia** (por ejemplo, un DEM), que impone resolución, extensión y alineación.
+
+Dependiendo del método elegido, se reproyecta y recorta el stack de SoilGrids y se calcula **K** como raster alineado al área de estudio. 
 
 
 ## 1. Carga de librerías y funciones
 
 ```{r setup}
+
+# Exporta el cuaderno como script plano .R
+#knitr::purl("01_rusle_k_SoilGrids.qmd")
+
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 pacman::p_load(
-  here, sf, terra, dplyr, tidyr, ggplot2
+  here,     # manejo de rutas relativas
+  sf,       # lectura y transformación de vectores espaciales (polígonos)
+  terra,    # manipulación de rasteres y análisis espacial
+  dplyr,    # manipulación de data frames y tuberías
+  tidyr,    # transformación entre formato ancho/largo
+  ggplot2   # visualización de datos (gráficas)
 )
 ```
 
-## 2. Lectura del polígono de estudio y definición de CRS
+## 2. Lectura de geometría del área de estudio 
 
-```{r}
+### 2.1 Lectura de polígono (si se usa como referencia)
+
+```{r label = lee_poligono}
+
 # Cargar polígono geojson
-poli_estudio <- st_read(here("RUSLE_SoilGrids", "Data", "INP_cuenca_rio_barbas.geojson"))
+#poli_estudio <- st_read(here("RUSLE_SoilGrids", "Data", "INP_cuenca_rio_barbas_3116.geojson"))
 
-# Transformar a CRS de SoilGrids (IGH: EPSG 54052)
-wkt_igh <- "+proj=igh +lat_0=0 +lon_0=0 +datum=WGS84 +units=m +no_defs"
-poli_estudio_igh <- st_transform(poli_estudio, wkt_igh)
 ```
+
+### 2.2 Lectura de un raster de referencia y definición de propiedade espaciales del área de studio
+
+```{r label = lee_raster}
+
+dem <- rast(here("RUSLE_SoilGrids", "Data", "INP_dem_rio_barbas_burnt_fill_3116.tif"))
+
+# Extraer propiedades clave del DEM
+dem_crs <- crs(dem)
+dem_ext <- ext(dem)
+dem_res <- res(dem)
+
+plot(dem)
+```
+
 
 ## 3. Descarga y carga de capas de SoilGrids
 
@@ -42,34 +69,155 @@ poli_estudio_igh <- st_transform(poli_estudio, wkt_igh)
 source(here("RUSLE_SoilGrids", "Scripts", "00_funcion_descarga_soilgrids.R"))
 
 stack_soil <- descargar_soilgrids_stack(
-  vars = c("sand", "silt", "clay", "soc", "bdod"),
+  vars = c("sand", "silt", "clay", "soc"),
   depths = c("0-5cm"),
   stats = c("mean"),
   resolucion = c(250, 250),
   ruta_vrt = here("RUSLE_SoilGrids", "Data", "OUT_SoilGrids_vrt")
 )
 
-# Recorte al área de estudio
-stack_soil_crop <- crop(stack_soil, vect(poli_estudio_igh)) |> 
-  mask(vect(poli_estudio_igh))
+```
+## 4. Recorte y reproyección del stack de SoilGrids
+
+Antes de aplicar reproyección o remuestreo, se realiza un recorte del stack original de SoilGrids usando el área de estudio definida por el usuario (ya sea un raster de referencia —como un DEM— o un polígono).
+
+Este paso permite identificar problemas potenciales como valores faltantes (NA) antes de que se apliquen interpolaciones que puedan introducir artefactos.
+
+En el caso de usar un DEM como referencia, se extrae su extensión y se transforma al sistema de coordenadas nativo de SoilGrids (IGH). Si se usa un polígono, se transforma directamente a IGH.
+
+El resultado es stack_soil_crop, que conserva la resolución original de SoilGrids.
+
+```{r}
+## 4. Recorte y verificación del stack de SoilGrids (previo a reproyección)
+
+# Definir proyección IGH usada por SoilGrids (Homosínclinal Mundial)
+wkt_igh <- "+proj=igh +lat_0=0 +lon_0=0 +datum=WGS84 +units=m +no_defs"
+
+# Detectar automáticamente si se usará el DEM como referencia
+usar_raster <- exists("dem")
+
+if (usar_raster) {
+  message("Usando raster DEM como referencia espacial.")
+
+  # 1. Extraer la extensión del DEM como polígono y asignar CRS explícitamente
+  dem_bbox_vect <- as.polygons(ext(dem))
+  crs(dem_bbox_vect) <- crs(dem)
+
+  # 2. Transformar bbox al CRS de SoilGrids (IGH)
+  dem_bbox_sf   <- st_as_sf(dem_bbox_vect)
+  dem_bbox_proj <- st_transform(dem_bbox_sf, wkt_igh) |> vect()
+
+  # 3. Recorte preliminar del stack de SoilGrids (sin reproyectar aún)
+  stack_soil_crop <- crop(stack_soil, dem_bbox_proj)
+
+} else {
+  message("Usando polígono como referencia espacial.")
+
+  # 1. Transformar el polígono al CRS de SoilGrids (IGH)
+  poli_estudio_igh  <- st_transform(poli_estudio, wkt_igh)
+  poli_estudio_vect <- vect(poli_estudio_igh)
+
+  # 2. Recorte preliminar del stack de SoilGrids (sin reproyectar aún)
+  stack_soil_crop <- crop(stack_soil, poli_estudio_vect)
+}
+
+# Verificar presencia de NA internos antes de reproyección
+na_resumen <- global(is.na(stack_soil_crop), "sum", na.rm = FALSE)
+print("Celdas NA por capa antes de reproyección:")
+print(na_resumen)
+
+# Visualizar una capa de textura para inspección visual
+plot(stack_soil_crop)
+
+```
+Diagnóstico de valores faltantes
+
+```{r}
+# Análisis de valores faltantes por capa
+na_summary <- global(is.na(stack_soil_crop), fun = "sum", na.rm = FALSE)
+print("Número de celdas NA por capa (previo a reproyección):")
+print(na_summary)
+
+# Verificar si hay NAs internos
+tiene_na <- any(na_summary[] > 0)
+
+if (tiene_na) {
+  message("⚠️  Se detectaron valores faltantes (NA) en el stack recortado.")
+} else {
+  message("✅  No se detectaron valores NA en el stack recortado.")
+}
+
 ```
 
-## 4. Conversión de unidades
+
+Una vez validado el recorte preliminar (stack_soil_crop), se procede a reproyectar y alinear espacialmente el stack al área de estudio:
+
+Si se definió un raster de referencia (e.g., un DEM), se usa su sistema de coordenadas y su grilla para remuestrear y alinear el stack de SoilGrids.
+
+Si se usó un polígono, se reproyecta el stack al CRS original del polígono y se aplica una máscara para restringir la salida al área de interés.
+
+Antes del remuestreo final, se verifica si el stack reproyectado contiene valores faltantes (NA). Si los hay, se aplica una interpolación local por vecinos cercanos, usando la media de una ventana 3×3 (filtro focal). Este método rellena celdas faltantes con el valor medio de sus píxeles vecinos válidos, evitando así artefactos o huecos en el raster final.
+
+El resultado final es stack_soil_ready, que contiene las capas de SoilGrids ajustadas espacialmente, listas para el cálculo del factor de erodabilidad K.
+
+
+```{r}
+## Reproyección y alineación (solo si se validó el stack recortado)
+
+if (usar_raster) {
+  # Reproyectar al CRS del DEM
+  stack_soil_proj <- project(stack_soil_crop, crs(dem), method = "bilinear")
+
+  # Interpolación de NA si existen
+  na_check <- global(is.na(stack_soil_proj), "sum", na.rm = FALSE)
+  if (any(na_check[] > 0)) {
+    message("⚠️  Se detectaron NA después de reproyección. Aplicando interpolación local.")
+    stack_soil_proj <- focal(stack_soil_proj, w = 3, fun = "mean", na.policy = "only", na.rm = TRUE)
+  }
+
+  # Alinear al raster DEM
+  stack_soil_ready <- resample(stack_soil_proj, dem, method = "bilinear")
+
+} else {
+  # Reproyectar al CRS original del polígono
+  crs_poli <- st_crs(poli_estudio)$wkt
+  stack_soil_proj <- project(stack_soil_crop, crs_poli, method = "bilinear")
+
+  # Interpolación de NA si existen
+  na_check <- global(is.na(stack_soil_proj), "sum", na.rm = FALSE)
+  if (any(na_check[] > 0)) {
+    message("⚠️  Se detectaron NA después de reproyección. Aplicando interpolación local.")
+    stack_soil_proj <- focal(stack_soil_proj, w = 3, fun = "mean", na.policy = "only", na.rm = TRUE)
+  }
+
+  # Aplicar máscara espacial con el polígono
+  stack_soil_ready <- mask(stack_soil_proj, vect(poli_estudio))
+}
+
+```
+
+
+## 5. Conversión de unidades y cálculo de MO
+
+Las variables descargadas desde SoilGrids están en unidades que no son directamente compatibles con las ecuaciones empíricas para K. Por ello, se realiza una conversión previa. Además, se estima el contenido de materia orgánica (OM) a partir de SOC, usando el factor de conversión estándar de Van Bemmelen.
+
+Estas transformaciones permiten que las ecuaciones posteriores calculen el factor K en unidades métricas SI: t·ha⁻¹·h·MJ⁻¹·mm⁻¹, compatibles con InVEST y otros modelos.
 
 ```{r}
 # Extraer y convertir unidades
-sand <- stack_soil_crop[["sand_0-5cm_mean"]] / 10  # g/kg → %
-silt <- stack_soil_crop[["silt_0-5cm_mean"]] / 10
-clay <- stack_soil_crop[["clay_0-5cm_mean"]] / 10
-soc  <- stack_soil_crop[["soc_0-5cm_mean"]] / 10  # dg/kg → %
-bd   <- stack_soil_crop[["bdod_0-5cm_mean"]] / 100  # cg/cm³ → g/cm³
+sand <- stack_soil_ready[["sand_0-5cm_mean"]] / 10  # g/kg → %
+silt <- stack_soil_ready[["silt_0-5cm_mean"]] / 10
+clay <- stack_soil_ready[["clay_0-5cm_mean"]] / 10
+soc  <- stack_soil_ready[["soc_0-5cm_mean"]] / 10  # dg/kg → %
+bd   <- stack_soil_ready[["bdod_0-5cm_mean"]] / 100  # cg/cm³ → g/cm³
 
 # Materia orgánica a partir de SOC
 om <- soc * 1.724
 ```
 
+## 6. Estimaciones de K
 
-## 1. Ecuación de Renard et al. (1997) vía Dg.
+### 6.1 Ecuación de Renard et al. (1997) vía Dg.
 
 Esta ecuación estima K a partir del **diámetro geométrico medio** (Dg) de las partículas, aplicando una función tipo gaussiana. Es adecuada para suelos donde se dispone de textura completa. Fue reportada por Renard et al. (1997): predicting soil erosion by water: a guide to conservation planning with the Revisited Universal Soil Loss Equation (RUSLE)
 
@@ -84,10 +232,10 @@ K_renard <- 0.0034 + 0.0405 * exp(-0.5 * ((log(dg) + 1.659) / 0.7101)^2)
 
 plot(K_renard)
 
-writeRaster(K_renard, here::here("RUSLE_SoilGrids", "Scripts", "K_renard_dg.tif"), overwrite = TRUE)
+writeRaster(K_renard, here::here("RUSLE_SoilGrids", "Data", "OUT_K_renard_dg.tif"), overwrite = TRUE)
 ```
 
-## 2. Ecuación de Denardin (1990)
+### 6.2 Ecuación de Denardin (1990)
 
 Propone un cálculo de K usando una combinación de variables texturales: fracciones finas y materia orgánica. Es ampliamente utilizada en Brasil y recomendada para suelos tropicales. Se ha aplicado en estudios regionales con SoilGrids.
 
@@ -99,10 +247,10 @@ K_denardin <- 0.0134 + 0.0027 * M / 10000 - 0.00001 * M^2 / 1e8
 
 plot(K_denardin)
 
-writeRaster(K_denardin, here::here("RUSLE_SoilGrids", "Scripts", "K_denardin.tif"), overwrite = TRUE)
+writeRaster(K_denardin, here::here("RUSLE_SoilGrids", "Data", "OUT_K_denardin.tif"), overwrite = TRUE)
 ```
 
-## 3. Ecuación de Sharpley & Williams (1990) 
+### 6.3 Ecuación de Sharpley & Williams (1990) 
 
 Usada originalmente en el modelo EPIC y luego adoptada en SWAT, esta ecuación permite estimar K usando arena, limo, arcilla y contenido de carbono. Es una de las más sólidas en términos estadísticos para regiones sin datos de estructura del suelo.
 
@@ -120,9 +268,16 @@ K_sw_SI <- K_sw * 0.1317
 
 plot(K_sw_SI)
 
-writeRaster(K_sw_SI, here::here("RUSLE_SoilGrids", "Scripts","K_sharpley_williams.tif"), overwrite = TRUE)
+writeRaster(K_sw_SI, here::here("RUSLE_SoilGrids", "Data","OUT_K_sharpley_williams.tif"), overwrite = TRUE)
 ```
 
-#
+## 7. Conclusiones
+
+Aumentan K en presencia de limo + materia orgánica, lo cual refleja la susceptibilidad de estos suelos a la erosión, especialmente si no hay estructura agregada estabilizada (algo que SoilGrids no informa).
+
+Esto está respaldado por estudios como Torri, D., Poesen, J., & Borselli, L. (1997). Predictability and uncertainty of the soil erodibility factor using a global dataset. Catena, 31(1), 1–22. https://doi.org/10.1016/S0341-8162(97)00036-2
+
+Y visualmente en curvas como esta del RUSLE handbook (Renard et al., 1997), donde K es máximo en suelos con:
+35–70% de limo, <20% de arcilla, materia orgánica baja-intermedia, y estructura débil o ausente (lo cual no está modelado aquí).
 
 
