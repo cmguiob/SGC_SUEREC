@@ -16,6 +16,8 @@ if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 pacman::p_load(
     "aqp",
     "soilDB",
+    "Hmisc",
+    "lattice",
     "readxl",
     "dplyr",
     "here")
@@ -27,7 +29,7 @@ Se cargan los datos de horizontes y sitios de los suelos muestreados.
 
 ```{r label = carga, messages = FALSE, warnings = FALSE}
 
-datos <- readxl::read_excel(here::here("Perfiles_AQP", "Data","horizontes.xlsx"))
+datos <- readxl::read_excel(here::here("Perfiles_AQP", "Data","horizontes.xlsx"), sheet = "ejemplo_tabla_horizontes") 
 
 head(datos)
 
@@ -41,6 +43,9 @@ Se crean columnas nuevas con los valores RGB a partir de los colores de Munsell
 ```{r label = procesamiento}
 
 datos_procesados <- datos |>
+    # Corregimos formato texto a número
+    mutate(ph_lab = as.numeric(ph_lab),
+           ph_t_lab = as.numeric(ph_t_lab)) |>
     # Creamos columnas de datos procesados
     dplyr::mutate(
         # Convertir colores Munsell a RGB
@@ -63,7 +68,8 @@ datos_procesados <- datos |>
             distinctness == "Abrupt" ~ 2,
             is.na(distinctness) ~ 5,
             TRUE ~ 5)
-    )
+    ) |>
+  as.data.frame()
 
 ```
 
@@ -76,7 +82,23 @@ Creamos la colección de perfiles
 datos_spc <- datos_procesados
 
 # Crear SoilProfileCollection
+# 'id' es el nombre de la columna que contiene el ID del perfil
+# 'top' es el nombre de la columna que contiene los límites superiores de los horizontes
+# 'bottom' es el nombre de la columna que contiene los límites infereiores de los horizontes
 depths(datos_spc) <- id ~ top + bottom
+
+# Designa columna con nombre de horizontes
+hzdesgnname(datos_spc) <- 'name'
+
+# Designa columna para distinción del límite entre horizontes
+datos_spc$hd <- hzDistinctnessCodeToOffset(datos_spc$distinctness)
+
+# Designa columna para topografíadel límite entre horizontes
+datos_spc$hzto <- hzTopographyCodeToOffset(datos_spc$topography)
+
+# Codifica el tipo de línea para la tropografía entre horizontes
+datos_spc$hzto.lty <- hzTopographyCodeToLineType(datos_spc$topography)
+
 
 ```
 
@@ -87,16 +109,170 @@ Se visualiza la colección de perfiles
 
 ```{r label = visualizacion}
 
+# Ordenar perfiles por número
+ids_numericos <- as.integer(profile_id(datos_spc))
+orden_plot <- order(ids_numericos)
+
+par(xpd = TRUE)  # Permite dibujar fuera del área del plot
+
 aqp::plotSPC(
   datos_spc,
-  name = "name",
   color = "color_hz",
-  print.id = TRUE,
-  cex.names = 1.5,
+  plot.order = orden_plot,  # ← Este es el que manda
+  cex.names = 0.4,
   depth.axis = TRUE,
   width = 0.4,
-  hz.distinctness.offset = "hzd"  # Aplica el efecto visual del límite
+  name.style = 'center-center',
+  hz.distinctness.offset = "hd",  # Aplica el efecto visual del límite
+  hz.topography.offset = 'hzto',
+  hz.boundary.lty = 'hzto.lty'
 )
 
 
+legend('bottom', horiz = TRUE, legend = c('Suave', 'Ondulado', 'Irregular', 'Escalonado'), lty = 1:4, inset = -0.1, bty = 'n', cex = 0.65)
+
 ```
+
+
+```{r}
+
+
+
+# Conservar solo perfiles con tres o más horizontes
+datos_validos <- subset(datos_spc, aqp::profileApply(datos_spc, \(p) nrow(p) >= 3))
+
+
+# Graficar con todo
+plotSPC(
+  datos_validos,
+  color = "color_hz",
+  cex.names = 0.4,
+  depth.axis = TRUE,
+  width = 0.4,
+  name.style = 'center-center',
+  hz.distinctness.offset = "hd",
+  hz.topography.offset = 'hzto',
+  hz.boundary.lty = 'hzto.lty') 
+
+legend('bottomleft', horiz = TRUE, legend = c('Smooth', 'Wavy', 'Irregular', 'Broken'), lty = 1:4, inset = -0.01, bty = 'n', cex = 0.85)
+
+```
+
+A continuación se grafican pero ordenandolos por pH
+
+```{r}
+
+# 1. Calcular pH ponderado por espesor de horizonte
+wt.mean.ph <- function(i) {
+  thick <- i$bottom - i$top
+  wtd.mean(i$ph_lab, weights = thick, na.rm = TRUE)
+}
+site(datos_spc)$ph_weighted <- profileApply(datos_spc, wt.mean.ph)
+
+# 2. Ordenar perfiles según el pH ponderado
+orden_por_ph <- order(site(datos_spc)$ph_weighted)
+
+# 3. Exportar PNG con layout dividido
+png("perfil_tipo_ph.png", width = 6, height = 4, units = "in", res = 300)
+
+# Definir layout: 93% perfiles (fila 1), 7% leyenda (fila 2)
+layout(matrix(1:2, nrow = 2), heights = c(0.93, 0.07))
+
+# ──────────────── PANEL 1: Gráfico de perfiles ────────────────
+par(mar = c(5.2, 0, 4, 2))  # márgenes para que no corte etiquetas ni el eje
+
+plotSPC(
+  datos_spc,
+  plot.order = orden_por_ph,
+  color = "color_hz",
+  cex.names = 0.4,
+  depth.axis = list(style = "traditional", cex = 0.6),
+  width = 0.4,
+  name.style = "center-center",
+  hz.distinctness.offset = "hd",
+  hz.topography.offset = "hzto",
+  hz.boundary.lty = "hzto.lty"
+)
+
+# Eje inferior con etiquetas de pH ponderado
+axis(
+  1,
+  at = 1:length(datos_spc),
+  labels = round(site(datos_spc)$ph_weighted[orden_por_ph], 2),
+  cex.axis = 0.6,
+  las = 2
+)
+
+# Etiqueta del eje x
+mtext(
+  side = 1,
+  line = 3.8,
+  text = "Mean pH weighted by horizon thickness",
+  cex = 0.8
+)
+
+# ──────────────── PANEL 2: Leyenda ────────────────
+par(mar = c(0, 0, 0, 0))
+plot.new()
+legend(
+  "center",
+  horiz = TRUE,
+  legend = c("Smooth", "Wavy", "Irregular", "Broken"),
+  lty = 1:4,
+  bty = "n",
+  cex = 0.8
+)
+
+dev.off()
+
+```
+Se grafica la curva de pH
+
+
+```{r}
+
+# Calcular estadísticos de pH por profundidad (1 cm)
+agg_ph <- slab(datos_spc, fm = ~ ph_lab)
+
+# Exportar gráfico angosto con texto reducido
+png("curva_tipo_ph.png", width = 3.2, height = 4, units = "in", res = 300)
+
+xyplot(
+  top ~ p.q50 | variable,
+  data = agg_ph,
+  lower = agg_ph$p.q25,
+  upper = agg_ph$p.q75,
+  ylim = c(max(agg_ph$top), 0),
+  ylab = "Depth (cm)",
+  xlab = "Mean pH and IQR",
+  panel = panel.depth_function,
+  prepanel = prepanel.depth_function,
+  alpha = 0.3,
+  sync.colors = TRUE,
+  cf = agg_ph$contributing_fraction,
+  cf.col = 'black',
+  cf.interval = 20,
+  cf.cex = 0.5,  # << tamaño reducido del % de contribución
+  layout = c(1, 1),
+  par.settings = list(
+    superpose.line = list(col = 'slateblue', lwd = 2),
+    axis.text = list(cex = 0.8),
+    par.xlab.text = list(cex = 1),
+    par.ylab.text = list(cex = 1),
+    strip.background = list(col = grey(0.9))
+  ),
+  strip = strip.custom(bg = grey(0.9), style = 1),  # asegurar que se dibuje
+  par.strip.text=list(cex=1),
+  scales = list(
+    x = list(relation = 'same', alternating = 3, cex = 0.8),
+    y = list(cex = 0.65)
+  )
+)
+
+dev.off()
+
+
+
+
+```
+
