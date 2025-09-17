@@ -107,7 +107,7 @@ datos_spc$hzto.lty <- hzTopographyCodeToLineType(datos_spc$topography)
 Se visualiza la colección de perfiles
 
 
-```{r label = visualizacion}
+```{r label = viz_esp}
 
 # Ordenar perfiles por número
 ids_numericos <- as.integer(profile_id(datos_spc))
@@ -134,7 +134,7 @@ legend('bottom', horiz = TRUE, legend = c('Suave', 'Ondulado', 'Irregular', 'Esc
 ```
 
 
-```{r}
+```{r label = viz_eng}
 
 
 
