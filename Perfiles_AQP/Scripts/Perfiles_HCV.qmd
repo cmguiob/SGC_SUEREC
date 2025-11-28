@@ -207,7 +207,7 @@ axis(
 mtext(
   side = 1,
   line = 3.8,
-  text = "Mean pH weighted by horizon thickness",
+  text = "pH medio ponderado por espezor de horizonte",
   cex = 0.8
 )
 
@@ -217,7 +217,7 @@ plot.new()
 legend(
   "center",
   horiz = TRUE,
-  legend = c("Smooth", "Wavy", "Irregular", "Broken"),
+  legend = c("Suave", "Ondulado", "Irregular", "Quebrado"),
   lty = 1:4,
   bty = "n",
   cex = 0.8
@@ -243,8 +243,8 @@ xyplot(
   lower = agg_ph$p.q25,
   upper = agg_ph$p.q75,
   ylim = c(max(agg_ph$top), 0),
-  ylab = "Depth (cm)",
-  xlab = "Mean pH and IQR",
+  ylab = "Profundidad (cm)",
+  xlab = "pH medio y rango intercuartil",
   panel = panel.depth_function,
   prepanel = prepanel.depth_function,
   alpha = 0.3,
